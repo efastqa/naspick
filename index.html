@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <title>Naspick - Sri Lanka's Real-Time Ride-Hailing Platform</title>
+    <meta name="description" content="Sri Lanka's real-time ride-hailing and tour booking platform focusing on Colombo, Kandy, Kurunegala, and Negombo corridors with 1-tap booking, live GPS tracking, and password-protected admin controls." />
+    
+    <!-- PWA & Mobile Web Capabilities -->
+    <meta name="theme-color" content="#020617" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Naspick" />
+    <meta name="application-name" content="Naspick" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- OpenGraph & Social Metadata -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Naspick Sri Lanka" />
+    <meta property="og:title" content="Naspick - Sri Lanka's Real-Time Ride-Hailing Platform" />
+    <meta property="og:description" content="Sri Lanka's real-time ride-hailing and tour booking platform focusing on Colombo, Kandy, Kurunegala, and Negombo corridors with 1-tap booking, live GPS tracking, and password-protected admin controls." />
+    <meta property="og:image" content="/pwa-512x512.png" />
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Naspick - Sri Lanka's Real-Time Ride-Hailing Platform" />
+    <meta name="twitter:description" content="Connect with professional tuk-tuk, cab, and van drivers across Sri Lanka in real-time with live GPS tracking, transparent LKR fares, and instant booking." />
+    <meta name="twitter:image" content="/pwa-512x512.png" />
+
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Naspick",
+      "alternateName": "Naspick Sri Lanka Ride Hailing",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "All",
+      "description": "Sri Lanka's real-time ride-hailing and fleet dispatch platform with GPS tracking, multi-stop trips, driver partner wallet payouts, and DMT LK verified vehicles.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "LKR"
+      }
+    }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
