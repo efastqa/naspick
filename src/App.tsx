@@ -3,6 +3,10 @@ import { Navbar } from './components/Navigation/Navbar';
 import { SriLankaMap } from './components/Map/SriLankaMap';
 import { RiderBookingPanel } from './components/Rider/RiderBookingPanel';
 import { TripRatingModal } from './components/Rider/TripRatingModal';
+import { TripHistoryModal } from './components/Rider/TripHistoryModal';
+import { TripReceiptModal } from './components/Rider/TripReceiptModal';
+import { LostItemModal } from './components/Rider/LostItemModal';
+import { ShareTripModal } from './components/Rider/ShareTripModal';
 import { DriverDashboard } from './components/Driver/DriverDashboard';
 import { AddDriverModal } from './components/Driver/AddDriverModal';
 import { AdminControl } from './components/Admin/AdminControl';
@@ -13,6 +17,7 @@ import { OfflineIndicator } from './components/Common/OfflineIndicator';
 import { CustomerAuthModal } from './components/Customer/CustomerAuthModal';
 import { SRI_LANKA_LOCATIONS, VEHICLE_OPTIONS } from './data/mockLocations';
 import { INITIAL_DRIVERS, INITIAL_PAYOUTS, INITIAL_DRIVER_APPLICATIONS } from './data/mockDrivers';
+import { INITIAL_TRIP_HISTORY } from './data/mockTripHistory';
 import { INITIAL_CUSTOMER_USER } from './utils/locationUtils';
 import { 
   LocationPoint, 
@@ -28,6 +33,7 @@ import {
   DeviceViewMode, 
   AppSettings, 
   CustomerUser,
+  CityHubId,
   PRIMARY_SAFETY_CONTACT, 
   PRIMARY_SAFETY_CONTACT_INTL 
 } from './types';
@@ -47,6 +53,12 @@ import {
   Layers,
   Compass
 } from 'lucide-react';
+
+let uniqueEventIdCounter = 0;
+const createUniqueEventId = (prefix: string) => {
+  uniqueEventIdCounter += 1;
+  return `${prefix}_${Date.now()}_${uniqueEventIdCounter}_${Math.random().toString(36).slice(2, 7)}`;
+};
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState<'rider' | 'driver' | 'admin'>('rider');
@@ -74,13 +86,20 @@ export default function App() {
   const [showRatingModal, setShowRatingModal] = useState<boolean>(false);
   const [completedRideForRating, setCompletedRideForRating] = useState<Ride | null>(null);
 
-  // Focus City Hub Selection (Colombo, Kandy, Kurunegala, Negombo)
-  const [selectedCityHub, setSelectedCityHub] = useState<'all' | 'colombo' | 'kandy' | 'kurunegala' | 'negombo'>('all');
+  // Focus City Hub Selection (Galle, Colombo, Kandy, Kurunegala, Negombo)
+  const [selectedCityHub, setSelectedCityHub] = useState<CityHubId>('all');
   const [mobileTab, setMobileTab] = useState<'panel' | 'map' | 'split'>('split');
 
-  const handleSelectCityHub = (hub: 'all' | 'colombo' | 'kandy' | 'kurunegala' | 'negombo') => {
+  const handleSelectCityHub = (hub: CityHubId) => {
     setSelectedCityHub(hub);
-    if (hub === 'kandy') {
+    if (hub === 'galle') {
+      const p = SRI_LANKA_LOCATIONS.find((l) => l.id === 'loc_galle_fort');
+      const d = SRI_LANKA_LOCATIONS.find((l) => l.id === 'loc_unawatuna_beach');
+      if (p && d) {
+        setPickup(p);
+        setDropoff(d);
+      }
+    } else if (hub === 'kandy') {
       const p = SRI_LANKA_LOCATIONS.find((l) => l.id === 'loc_kandy_station');
       const d = SRI_LANKA_LOCATIONS.find((l) => l.id === 'loc_kandy_tooth');
       if (p && d) {
@@ -218,6 +237,60 @@ export default function App() {
     }
   };
 
+  // Passenger Past Trips & Activity History State
+  const [pastTrips, setPastTrips] = useState<Ride[]>(() => {
+    try {
+      const saved = localStorage.getItem('naspick_past_trips');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_TRIP_HISTORY;
+  });
+  const [showTripHistoryModal, setShowTripHistoryModal] = useState<boolean>(false);
+  const [selectedReceiptRide, setSelectedReceiptRide] = useState<Ride | null>(null);
+  const [selectedLostItemRide, setSelectedLostItemRide] = useState<Ride | null>(null);
+  const [showShareTripModal, setShowShareTripModal] = useState<boolean>(false);
+
+  const handleRebookTrip = (trip: Ride) => {
+    setPickup(trip.pickup);
+    setDropoff(trip.dropoff);
+    if (trip.intermediateStops && trip.intermediateStops.length > 0) {
+      setIntermediateStops(trip.intermediateStops);
+    } else {
+      setIntermediateStops([]);
+    }
+    setCurrentRole('rider');
+    triggerPush('Route Loaded', `Re-booking route to ${trip.dropoff.name}`);
+    addSms(
+      customerUser?.phone || '+94 77 982 1092',
+      `Naspick 1-Tap Rebook: Loaded route ${trip.pickup.name} -> ${trip.dropoff.name}. Confirm your vehicle to request driver!`,
+      'trip_started'
+    );
+  };
+
+  const handleSubmitLostItem = (report: {
+    rideId: string;
+    itemType: string;
+    description: string;
+    contactPhone: string;
+    driverPhone: string;
+    driverName: string;
+  }) => {
+    addSms(
+      report.driverPhone,
+      `URGENT NASPICK ALERT: Passenger on trip ${report.rideId} reported a lost item (${report.itemType.toUpperCase()} - ${report.description}). Please inspect vehicle and call passenger at ${report.contactPhone}.`,
+      'safety_alert'
+    );
+    addSms(
+      report.contactPhone,
+      `Naspick Lost & Found: Ticket logged for your lost ${report.itemType}. Driver ${report.driverName} has been alerted via urgent SMS. 24/7 Helpline: 077 526 0765.`,
+      'safety_alert'
+    );
+    triggerPush('Lost Item Report Sent', `Driver ${report.driverName} has been notified via priority SMS.`);
+  };
+
   const handleSelectRole = (role: 'rider' | 'driver' | 'admin') => {
     if (role === 'admin') {
       if (!isAdminAuthenticated) {
@@ -287,7 +360,18 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => {
         if (data.notifications && data.notifications.length > 0) {
-          setSmsList(data.notifications);
+          setSmsList((prev) => {
+            const seen = new Set<string>();
+            const result: SmsNotification[] = [];
+            for (const item of [...data.notifications, ...prev]) {
+              const itemId = item.id || createUniqueEventId('sms');
+              if (!seen.has(itemId)) {
+                seen.add(itemId);
+                result.push({ ...item, id: itemId });
+              }
+            }
+            return result;
+          });
         }
       })
       .catch(() => {});
@@ -295,21 +379,23 @@ export default function App() {
 
   // Dispatch local push alert
   const triggerPush = (title: string, body: string) => {
+    const id = createUniqueEventId('push');
     const newPush: PushNotification = {
-      id: `push_${Date.now()}`,
+      id,
       title,
       body,
       timestamp: 'Just now',
       read: false,
       type: 'info',
     };
-    setPushList((prev) => [newPush, ...prev]);
+    setPushList((prev) => [newPush, ...prev.filter((p) => p.id !== id)]);
   };
 
   // Add SMS locally
   const addSms = (phone: string, msg: string, type: any) => {
+    const id = createUniqueEventId('sms');
     const newSms: SmsNotification = {
-      id: `sms_${Date.now()}`,
+      id,
       recipientPhone: phone || '+94 77 982 1092',
       senderId: 'NASPICK-LK',
       message: msg,
@@ -318,7 +404,7 @@ export default function App() {
       status: 'delivered',
       type,
     };
-    setSmsList((prev) => [newSms, ...prev]);
+    setSmsList((prev) => [newSms, ...prev.filter((s) => s.id !== id)]);
   };
 
   const handleUpdateSettings = (newSettings: Partial<AppSettings>) => {
@@ -417,7 +503,11 @@ export default function App() {
         };
         setActiveRide(enrichedRide);
         triggerPush(
-          rideData.serviceMode === 'delivery' ? 'Flash Courier Booked' : 'Ride Confirmed',
+          rideData.serviceMode === 'delivery'
+            ? 'Flash Courier Booked'
+            : rideData.serviceMode === 'tour'
+            ? 'Tourist Tour Booked'
+            : 'Ride Confirmed',
           `Driver ${enrichedRide.driver?.name} is on the way.`
         );
         addSms(
@@ -464,7 +554,11 @@ export default function App() {
       setActiveRide(localRide);
       playAudioChime(659.25);
       triggerPush(
-        rideData.serviceMode === 'delivery' ? 'Flash Courier Booked' : 'Ride Confirmed',
+        rideData.serviceMode === 'delivery'
+          ? 'Flash Courier Booked'
+          : rideData.serviceMode === 'tour'
+          ? 'Tourist Tour Booked'
+          : 'Ride Confirmed',
         `Driver ${mockDriver.name} is on the way.`
       );
       addSms(
@@ -548,19 +642,35 @@ export default function App() {
         setCompletedRideForRating(data.ride);
         setShowRatingModal(true);
         setActiveRide(null);
+        // Persist to past trips history
+        setPastTrips((prev) => {
+          const updated = [data.ride, ...prev.filter((r) => r.id !== data.ride.id)];
+          try {
+            localStorage.setItem('naspick_past_trips', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
         playAudioChime(880.00);
         triggerPush('Trip Completed', `Total LKR ${data.ride.fare.totalLkr.toLocaleString()} paid.`);
         addSms(
           data.ride.riderPhone || '+94 77 982 1092',
-          `Naspick e-Receipt: Trip to ${data.ride.dropoff.name} completed. Total: LKR ${data.ride.fare.totalLkr.toLocaleString()} (${data.ride.paymentMethod.toUpperCase()}). Thank you for riding with Naspick!`,
+          `Naspick e-Receipt: Trip to ${data.ride.dropoff.name} completed. Total: LKR ${data.ride.fare.totalLkr.toLocaleString()} (${data.ride.paymentMethod.toUpperCase()}). View e-Receipt in Activity tab.`,
           'trip_completed'
         );
       }
     } catch (e) {
       if (activeRide) {
-        setCompletedRideForRating(activeRide);
+        const completedLocal: Ride = { ...activeRide, status: 'completed', completedAt: Date.now() };
+        setCompletedRideForRating(completedLocal);
         setShowRatingModal(true);
         setActiveRide(null);
+        setPastTrips((prev) => {
+          const updated = [completedLocal, ...prev.filter((r) => r.id !== completedLocal.id)];
+          try {
+            localStorage.setItem('naspick_past_trips', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
       }
     }
   };
@@ -626,7 +736,7 @@ export default function App() {
     } catch (e) {
       // Local fallback
       const newPayout: DriverPayout = {
-        id: `pay_${Date.now()}`,
+        id: createUniqueEventId('pay'),
         driverId: targetDriver.id,
         driverName: targetDriver.name,
         amountLkr,
@@ -696,7 +806,7 @@ export default function App() {
         );
       }
     } catch (e) {
-      const fallbackId = `drv_${Date.now()}`;
+      const fallbackId = createUniqueEventId('drv');
       const fullDriver: Driver = {
         id: fallbackId,
         name: newDriverData.name || 'New Driver Partner',
@@ -817,6 +927,13 @@ export default function App() {
             expresswayTollLkr={expresswayTollLkr}
             customerUser={customerUser}
             onOpenCustomerAuth={() => setIsCustomerAuthModalOpen(true)}
+            onOpenTripHistory={() => setShowTripHistoryModal(true)}
+            onOpenShareTrip={() => setShowShareTripModal(true)}
+            onOpenReceipt={(r) => setSelectedReceiptRide(r)}
+            onReportLostItem={(r) => setSelectedLostItemRide(r)}
+            pastTripsCount={pastTrips.length}
+            lastTrip={pastTrips[0] || null}
+            onRebookTrip={handleRebookTrip}
           />
         );
       case 'driver':
@@ -916,6 +1033,8 @@ export default function App() {
         }}
         customerUser={customerUser}
         onOpenCustomerAuth={() => setIsCustomerAuthModalOpen(true)}
+        onOpenTripHistory={() => setShowTripHistoryModal(true)}
+        pastTripsCount={pastTrips.length}
       />
 
       {/* Main App Canvas */}
@@ -1271,6 +1390,39 @@ export default function App() {
             'driver_arriving'
           );
         }}
+      />
+
+      {/* Trip History & Activity Drawer Modal */}
+      <TripHistoryModal
+        isOpen={showTripHistoryModal}
+        onClose={() => setShowTripHistoryModal(false)}
+        trips={pastTrips}
+        onRebookTrip={handleRebookTrip}
+        onOpenReceipt={(ride) => setSelectedReceiptRide(ride)}
+        onReportLostItem={(ride) => setSelectedLostItemRide(ride)}
+      />
+
+      {/* Official Tax e-Receipt / Invoice Modal */}
+      <TripReceiptModal
+        isOpen={selectedReceiptRide !== null}
+        onClose={() => setSelectedReceiptRide(null)}
+        ride={selectedReceiptRide}
+      />
+
+      {/* Report Lost Item Modal */}
+      <LostItemModal
+        isOpen={selectedLostItemRide !== null}
+        onClose={() => setSelectedLostItemRide(null)}
+        ride={selectedLostItemRide}
+        onSubmitReport={handleSubmitLostItem}
+      />
+
+      {/* Live Share Trip Modal (WhatsApp / SMS) */}
+      <ShareTripModal
+        isOpen={showShareTripModal}
+        onClose={() => setShowShareTripModal(false)}
+        ride={activeRide}
+        onSendSmsToContact={(phone, text) => addSms(phone, text, 'safety_alert')}
       />
     </div>
   );

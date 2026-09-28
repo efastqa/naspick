@@ -1,6 +1,6 @@
 {
   "name": "Naspick",
-  "description": "Sri Lanka's real-time ride-hailing and tour booking platform focusing on Colombo, Kandy, Kurunegala, and Negombo corridors with 1-tap booking, live GPS tracking, and password-protected admin controls.",
+  "description": "Sri Lanka's real-time ride-hailing, flash courier delivery, and islandwide tourist tour booking platform focusing on Galle, Colombo, Kandy, Kurunegala, and Negombo corridors with 1-tap booking, live GPS tracking, and password-protected admin controls.",
   "requestFramePermissions": [
     "geolocation"
   ],

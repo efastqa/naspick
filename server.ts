@@ -354,10 +354,12 @@ let driverApplications = [
 
 let surgeMultiplier = 1.0;
 
+let serverSmsCounter = 0;
+
 // Helper to add simulated automated SMS
 function dispatchSms(recipientPhone: string, message: string, type: any) {
   const newSms = {
-    id: `sms_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    id: `sms_${Date.now()}_${++serverSmsCounter}_${Math.random().toString(36).slice(2, 9)}`,
     recipientPhone: recipientPhone || '+94 77 982 1092',
     senderId: 'NASPICK-LK',
     message,

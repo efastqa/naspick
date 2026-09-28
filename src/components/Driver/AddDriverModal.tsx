@@ -153,7 +153,7 @@ export const AddDriverModal: React.FC<AddDriverModalProps> = ({
     const coords = CITY_COORDINATES[cityHub] || { lat: 6.9271, lng: 79.8612 };
 
     const newDriver: Partial<Driver> = {
-      id: `drv_${Date.now()}`,
+      id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: name.trim(),
       phone: phone.trim(),
       avatar:

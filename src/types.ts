@@ -135,7 +135,20 @@ export interface Ride {
   expresswayName?: string;
   deliveryDetails?: DeliveryDetails;
   rentalPackageId?: string;
+  tourPackageId?: string;
+  tourDetails?: TouristTourPackage;
   splitWithCount?: number;
+}
+
+export interface DriverPickupTracking {
+  distanceMeters: number;
+  etaMinutes: number;
+  speedKmH: number;
+  progressPercent: number; // 0.0 to 1.0
+  currentRoadName: string;
+  hasArrivedAtPickup: boolean;
+  driverHeadingDeg: number;
+  isFollowDriverActive: boolean;
 }
 
 export interface Driver {

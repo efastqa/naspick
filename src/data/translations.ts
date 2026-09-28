@@ -43,6 +43,7 @@ export interface Translations {
   tabRides: string;
   tabDelivery: string;
   tabRentals: string;
+  tabTours: string;
   scheduleForLater: string;
   scheduleRide: string;
   airportTransfer: string;
@@ -115,6 +116,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     tabRides: 'Rides',
     tabDelivery: 'Flash Courier',
     tabRentals: 'Hourly Rentals',
+    tabTours: 'Tourist Tours',
     scheduleForLater: 'Book for Later / Airport',
     scheduleRide: 'Schedule Pickup',
     airportTransfer: 'CMB Airport Transfer',
@@ -185,6 +187,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     tabRides: 'ගමන් (Rides)',
     tabDelivery: 'ෆ්ලෑෂ් පාර්සල් (Delivery)',
     tabRentals: 'පැය කුලියට (Rentals)',
+    tabTours: 'සංචාරක ගමන් (Tours)',
     scheduleForLater: 'පසුවට වෙන්කරන්න / ගුවන් තොටුපළ',
     scheduleRide: 'වේලාව වෙන්කරන්න',
     airportTransfer: 'කටුනායක ගුවන් තොටුපළ ගමන',
@@ -255,6 +258,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     tabRides: 'சவாரிகள் (Rides)',
     tabDelivery: 'பொதி விநியோகம் (Delivery)',
     tabRentals: 'மணித்தியால வாடகை (Rentals)',
+    tabTours: 'சுற்றுலாப் பயணங்கள் (Tours)',
     scheduleForLater: 'முன்பதிவு / விமான நிலையம்',
     scheduleRide: 'நேரத்தை முன்பதிவு செய்',
     airportTransfer: 'விமான நிலைய பரிமாற்றம்',

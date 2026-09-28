@@ -34,7 +34,12 @@ import {
   Briefcase,
   RefreshCw,
   Crosshair,
-  Compass
+  Compass,
+  Palmtree,
+  Receipt,
+  HelpCircle,
+  History,
+  ArrowLeft
 } from 'lucide-react';
 import { 
   LocationPoint, 
@@ -43,11 +48,14 @@ import {
   VehicleOption, 
   Language, 
   BookingServiceMode,
+  CityHubId,
+  TouristTourPackage,
   DeliveryDetails,
   CustomerUser,
   CustomerSavedPlace,
   PRIMARY_SAFETY_CONTACT,
-  PRIMARY_SAFETY_CONTACT_INTL
+  PRIMARY_SAFETY_CONTACT_INTL,
+  DriverPickupTracking
 } from '../../types';
 import { 
   SRI_LANKA_LOCATIONS, 
@@ -65,6 +73,10 @@ import { LiveTrackingSafetyModal } from '../Safety/LiveTrackingSafetyModal';
 import { DriverRiderChatModal } from '../Chat/DriverRiderChatModal';
 import { AudioCallModal } from '../Chat/AudioCallModal';
 import { DeliveryForm } from '../Delivery/DeliveryForm';
+import { TouristTourExplorer } from '../Tourist/TouristTourExplorer';
+import { UberLocationSearchModal } from './UberLocationSearchModal';
+import { PaymentMethodSelectorModal } from './PaymentMethodSelectorModal';
+import { RiderHomeServicesView } from './RiderHomeServicesView';
 
 interface RiderBookingPanelProps {
   pickup: LocationPoint;
@@ -94,12 +106,22 @@ interface RiderBookingPanelProps {
   surgeMultiplier: number;
   language?: Language;
   onSendSms?: (phone: string, text: string) => void;
-  selectedCityHub?: 'all' | 'colombo' | 'kandy' | 'kurunegala' | 'negombo';
-  onSelectCityHub?: (hub: 'all' | 'colombo' | 'kandy' | 'kurunegala' | 'negombo') => void;
+  selectedCityHub?: CityHubId;
+  onSelectCityHub?: (hub: CityHubId) => void;
   vehicleOptions?: VehicleOption[];
   expresswayTollLkr?: number;
   customerUser?: CustomerUser | null;
   onOpenCustomerAuth?: () => void;
+  pickupTracking?: DriverPickupTracking | null;
+  onToggleFollowDriver?: () => void;
+  isFollowDriverActive?: boolean;
+  onOpenTripHistory?: () => void;
+  onOpenShareTrip?: () => void;
+  onOpenReceipt?: (ride: Ride) => void;
+  onReportLostItem?: (ride: Ride) => void;
+  pastTripsCount?: number;
+  lastTrip?: Ride | null;
+  onRebookTrip?: (trip: Ride) => void;
 }
 
 export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
@@ -122,9 +144,24 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
   expresswayTollLkr = 300,
   customerUser,
   onOpenCustomerAuth,
+  pickupTracking,
+  onToggleFollowDriver,
+  isFollowDriverActive = true,
+  onOpenTripHistory,
+  onOpenShareTrip,
+  onOpenReceipt,
+  onReportLostItem,
+  pastTripsCount = 0,
+  lastTrip,
+  onRebookTrip,
 }) => {
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
   const activeVehicleOptions = vehicleOptions && vehicleOptions.length > 0 ? vehicleOptions : VEHICLE_OPTIONS;
+
+  // Uber-Style Two-Step Flow:
+  // 'home' -> Displays iconic 4 services ("Rides, Flash Courier, Tourist tours, Hourly rental"), Where to? bar, Quick destinations
+  // 'planning' -> Location route planning & vehicle selector with upfront fares
+  const [activeStep, setActiveStep] = useState<'home' | 'planning'>('home');
 
   // Active service mode tab: 'ride' | 'delivery' | 'rental'
   const [serviceMode, setServiceMode] = useState<BookingServiceMode>('ride');
@@ -232,6 +269,9 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
   const [showAudioCallModal, setShowAudioCallModal] = useState(false);
+  const [searchModalMode, setSearchModalMode] = useState<'pickup' | 'dropoff' | 'stop' | null>(null);
+  const [editingStopIndex, setEditingStopIndex] = useState<number | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Calculate Cumulative Route Distance (Pickup -> Intermediate Stops -> Dropoff)
   let totalDistanceKm = 0;
@@ -317,13 +357,13 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
   };
 
   // Submit Delivery Request
-  const handleDeliverySubmit = (details: DeliveryDetails, totalDeliveryLkr: number) => {
+  const handleDeliverySubmit = (details: DeliveryDetails, totalDeliveryLkr: number, vehicleCategory: 'moto' | 'tuk' | 'van' = 'moto') => {
     onRequestRide({
-      vehicleCategory: 'moto',
+      vehicleCategory,
       paymentMethod: 'cash',
       fare: {
         baseFare: 220,
-        distanceFare: totalDeliveryLkr - 220,
+        distanceFare: Math.max(0, totalDeliveryLkr - 220),
         timeFare: 0,
         surgeMultiplier: 1.0,
         discountLkr: 0,
@@ -335,6 +375,32 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
       riderPhone,
       serviceMode: 'delivery',
       deliveryDetails: details,
+    });
+  };
+
+  // Submit Tourist Tour Request
+  const handleBookTour = (tour: TouristTourPackage, tourPickup: LocationPoint, tourDropoff: LocationPoint) => {
+    onSelectPickup(tourPickup);
+    onSelectDropoff(tourDropoff);
+    setSelectedCategory(tour.recommendedVehicle);
+    onRequestRide({
+      vehicleCategory: tour.recommendedVehicle,
+      paymentMethod,
+      fare: {
+        baseFare: tour.baseFareLkr,
+        distanceFare: 0,
+        timeFare: 0,
+        expresswayTollLkr: 0,
+        surgeMultiplier: 1.0,
+        discountLkr: 0,
+        platformFee: Math.round(tour.baseFareLkr * 0.1),
+        totalLkr: tour.baseFareLkr,
+        distanceKm: tour.kmEstimated,
+        estimatedMinutes: 360,
+      },
+      riderPhone,
+      serviceMode: 'tour',
+      rentalPackageId: tour.id,
     });
   };
 
@@ -380,7 +446,9 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
               </span>
               <h3 className="text-lg font-bold text-white font-heading mt-0.5">
                 {activeRide.serviceMode === 'delivery'
-                  ? 'Naspick Flash Delivery'
+                  ? 'Naspick Flash Courier'
+                  : activeRide.serviceMode === 'tour'
+                  ? 'Sri Lanka Tourist Tour'
                   : activeRide.status === 'in_progress'
                   ? 'En Route to Destination'
                   : 'Your Naspick Ride'}
@@ -410,6 +478,96 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
               <span className="px-2 py-1 bg-emerald-500/20 text-emerald-300 rounded font-mono text-xs font-bold">
                 {activeRide.deliveryDetails.packageWeightKg} kg
               </span>
+            </div>
+          )}
+
+          {/* Real-Time Driver Movement to Pickup Tracking Radar */}
+          {pickupTracking && (activeRide.status === 'accepted' || activeRide.status === 'arriving') && (
+            <div className="p-4 bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/50 rounded-2xl shadow-xl space-y-3 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 font-heading">
+                    {pickupTracking.hasArrivedAtPickup ? 'Driver Arrived at Pickup!' : 'Live Driver Tracking to Pickup'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onToggleFollowDriver}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                    isFollowDriverActive
+                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                      : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+                  }`}
+                  title="Follow driver movement on map"
+                >
+                  <Navigation className="w-3 h-3" />
+                  <span>{isFollowDriverActive ? 'Camera Locked' : 'Follow Driver'}</span>
+                </button>
+              </div>
+
+              {/* Dynamic Progress Bar */}
+              <div className="space-y-1.5">
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-700 rounded-full"
+                    style={{ width: `${Math.round(pickupTracking.progressPercent * 100)}%` }}
+                  ></div>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-semibold text-emerald-400">1. Dispatched</span>
+                  <span className={pickupTracking.progressPercent > 0.4 ? 'font-bold text-emerald-300' : ''}>
+                    2. En Route to You
+                  </span>
+                  <span className={pickupTracking.hasArrivedAtPickup ? 'font-bold text-emerald-400' : ''}>
+                    3. At Pickup Point
+                  </span>
+                </div>
+              </div>
+
+              {/* Dynamic Live Metrics Strip */}
+              <div className="grid grid-cols-3 gap-2 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 text-center">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase">Distance</span>
+                  <strong className="text-sm font-black text-white font-mono">
+                    {pickupTracking.hasArrivedAtPickup ? 'Arrived' : `${pickupTracking.distanceMeters} m`}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase">ETA</span>
+                  <strong className="text-sm font-black text-emerald-400 font-mono">
+                    {pickupTracking.hasArrivedAtPickup ? 'Now' : `${pickupTracking.etaMinutes} min`}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase">Speed</span>
+                  <strong className="text-sm font-black text-sky-400 font-mono">
+                    {pickupTracking.speedKmH} km/h
+                  </strong>
+                </div>
+              </div>
+
+              {/* Street Status Line */}
+              <p className="text-xs text-slate-300 flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800">
+                <MapPin className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <span className="truncate">{pickupTracking.currentRoadName}</span>
+              </p>
+
+              {/* Big Bold OTP Reminder Banner */}
+              <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/30 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-emerald-400">Rider Start PIN</span>
+                  <p className="text-lg font-black text-white font-mono tracking-widest leading-none mt-0.5">
+                    {activeRide.otp}
+                  </p>
+                </div>
+                <span className="text-[10px] text-slate-400 text-right max-w-[170px] leading-tight">
+                  Share this 4-digit PIN with {activeRide.driver?.name} when boarding to start meter.
+                </span>
+              </div>
             </div>
           )}
 
@@ -551,6 +709,45 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
             </div>
           </div>
 
+          {/* Active Trip Quick Utilities: Share WhatsApp / SMS, e-Receipt, Report Lost Item */}
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            <button
+              type="button"
+              id="active-share-trip-btn"
+              onClick={() => {
+                if (onOpenShareTrip) onOpenShareTrip();
+                else setShowSafetyModal(true);
+              }}
+              className="py-2 px-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-emerald-400 flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              title="Share live GPS link on WhatsApp"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share Live</span>
+            </button>
+
+            <button
+              type="button"
+              id="active-receipt-btn"
+              onClick={() => onOpenReceipt && onOpenReceipt(activeRide)}
+              className="py-2 px-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              title="View & Print Official e-Receipt"
+            >
+              <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+              <span>e-Receipt</span>
+            </button>
+
+            <button
+              type="button"
+              id="active-lost-item-btn"
+              onClick={() => onReportLostItem && onReportLostItem(activeRide)}
+              className="py-2 px-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-slate-400 hover:text-amber-300 flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              title="Report item left in vehicle"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Lost Item?</span>
+            </button>
+          </div>
+
           {/* Safety & SOS Strip */}
           <div className="flex items-center gap-2 pt-1">
             <button
@@ -570,50 +767,132 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
             </button>
           </div>
         </div>
+      ) : activeStep === 'home' ? (
+        /* ---------------- STEP 1: UBER-STYLE SERVICES HOME SCREEN ---------------- */
+        <RiderHomeServicesView
+          pickup={pickup}
+          onDetectGps={handleDetectGpsLocation}
+          isDetectingGps={isDetectingGps}
+          customerUser={customerUser}
+          onSelectService={(mode, triggerDestinationSearch) => {
+            setServiceMode(mode);
+            setActiveStep('planning');
+            if (triggerDestinationSearch) {
+              setSearchModalMode('dropoff');
+            }
+          }}
+          onChooseCurrentLocation={() => {
+            setSearchModalMode('pickup');
+          }}
+          onSelectDestinationDirect={(loc) => {
+            onSelectDropoff(loc);
+            setServiceMode('ride');
+            setActiveStep('planning');
+          }}
+          onOpenTripHistory={onOpenTripHistory}
+          pastTripsCount={pastTripsCount}
+          lastTrip={lastTrip}
+          onRebookTrip={onRebookTrip}
+          surgeMultiplier={surgeMultiplier}
+        />
       ) : (
-        /* ---------------- PRE-BOOKING INTERFACE ---------------- */
+        /* ---------------- STEP 2: ROUTE PLANNING & VEHICLE BOOKING ---------------- */
         <div className="flex flex-col h-full overflow-hidden">
-          {/* Top Service Navigation Tabs: Rides | Flash Courier | Hourly Rentals */}
-          <div className="flex items-center bg-slate-950/90 border-b border-slate-800 p-1.5 gap-1">
+          {/* Top Bar with Back Arrow to Return to Services and Service Navigation Tabs */}
+          <div className="flex items-center bg-slate-950/95 border-b border-slate-800 p-2 gap-2">
             <button
-              id="tab-rides"
-              onClick={() => setServiceMode('ride')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                serviceMode === 'ride'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
+              type="button"
+              id="back-to-home-services-btn"
+              onClick={() => setActiveStep('home')}
+              className="p-1.5 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors flex items-center gap-1.5 text-xs font-bold flex-shrink-0"
+              title="Return to Services Home"
             >
-              <Car className="w-3.5 h-3.5" />
-              <span>{t.tabRides}</span>
+              <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Back</span>
             </button>
 
-            <button
-              id="tab-delivery"
-              onClick={() => setServiceMode('delivery')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                serviceMode === 'delivery'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>{t.tabDelivery}</span>
-            </button>
+            {/* Service Navigation Tabs */}
+            <div className="flex items-center gap-1 flex-1 overflow-x-auto no-scrollbar">
+              <button
+                id="tab-rides"
+                onClick={() => setServiceMode('ride')}
+                className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap ${
+                  serviceMode === 'ride'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Car className="w-3.5 h-3.5" />
+                <span>{t.tabRides}</span>
+              </button>
 
-            <button
-              id="tab-rentals"
-              onClick={() => setServiceMode('rental')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                serviceMode === 'rental'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>{t.tabRentals}</span>
-            </button>
+              <button
+                id="tab-delivery"
+                onClick={() => setServiceMode('delivery')}
+                className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap ${
+                  serviceMode === 'delivery'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>{t.tabDelivery}</span>
+              </button>
+
+              <button
+                id="tab-tour"
+                onClick={() => setServiceMode('tour')}
+                className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap ${
+                  serviceMode === 'tour'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Palmtree className="w-3.5 h-3.5" />
+                <span>{t.tabTours || 'Tours'}</span>
+              </button>
+
+              <button
+                id="tab-rentals"
+                onClick={() => setServiceMode('rental')}
+                className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap ${
+                  serviceMode === 'rental'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>{t.tabRentals}</span>
+              </button>
+
+              {onOpenTripHistory && (
+                <button
+                  type="button"
+                  id="tab-history-btn"
+                  onClick={onOpenTripHistory}
+                  className="py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 text-slate-400 hover:text-emerald-400 hover:bg-slate-800/60 whitespace-nowrap"
+                  title="View your past rides & receipts"
+                >
+                  <History className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Trips</span>
+                  {pastTripsCount > 0 && (
+                    <span className="px-1 py-0.2 bg-emerald-500/20 text-emerald-300 text-[9px] rounded-full font-mono">
+                      {pastTripsCount}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* TAB: TOURIST TOURS MODE */}
+          {serviceMode === 'tour' && (
+            <TouristTourExplorer
+              onBookTour={handleBookTour}
+              currency="LKR"
+              onSelectCityHub={onSelectCityHub}
+            />
+          )}
 
           {/* TAB 1: FLASH COURIER MODE */}
           {serviceMode === 'delivery' && (
@@ -763,11 +1042,11 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                     Target Focus Hubs
                   </span>
                   <span className="text-[10px] text-emerald-400 font-medium">
-                    Colombo • Kandy • Kurunegala • Negombo
+                    Galle • Colombo • Kandy • Kurunegala • Negombo
                   </span>
                 </div>
 
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                   {FOCUS_HUBS.map((hub) => {
                     const isSelected = (selectedCityHub || 'all') === hub.id;
                     return (
@@ -845,235 +1124,183 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                 </div>
               </div>
 
-              {/* Location Route Box (Pickup, Intermediate Stops, Dropoff) */}
-              <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl flex flex-col gap-3">
-                {/* Pickup Point */}
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
-                    <MapPin className="w-4 h-4" />
+              {/* Uber-Style Iconic Connected Route Box */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl shadow-inner relative space-y-3">
+                {/* Connected Vertical Track Indicator */}
+                <div className="flex items-stretch gap-3">
+                  {/* Left Vertical Line with Route Dots */}
+                  <div className="flex flex-col items-center justify-between py-2 flex-shrink-0">
+                    <div className="w-3 h-3 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20"></div>
+                    <div className="w-0.5 flex-1 bg-slate-700 my-1 border-l border-dashed border-slate-500"></div>
+                    <div className="w-3 h-3 bg-white rounded-sm ring-4 ring-slate-800"></div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        {t.pickupLocation}
-                      </label>
+
+                  {/* Middle Interactive Location Selectors */}
+                  <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+                    {/* Pickup Input Card */}
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        id="auto-detect-gps-pickup-btn"
+                        id="uber-pickup-trigger"
+                        onClick={() => setSearchModalMode('pickup')}
+                        className="flex-1 p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-700/80 hover:border-emerald-500/60 rounded-xl text-left transition-all group"
+                      >
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          {t.pickupLocation}
+                        </span>
+                        <p className="text-xs font-bold text-white group-hover:text-emerald-300 truncate mt-0.5">
+                          {pickup.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {pickup.address} · {pickup.city}
+                        </p>
+                      </button>
+
+                      {/* 1-Tap GPS Button */}
+                      <button
+                        type="button"
+                        id="uber-gps-quick-btn"
                         onClick={handleDetectGpsLocation}
                         disabled={isDetectingGps}
-                        className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                        className="p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl transition-colors flex-shrink-0"
                         title="Use device GPS location"
                       >
                         {isDetectingGps ? (
-                          <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                          <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
                         ) : (
-                          <Crosshair className="w-3 h-3 text-emerald-400" />
+                          <Crosshair className="w-4 h-4 text-emerald-400" />
                         )}
-                        <span>{isDetectingGps ? 'Locating...' : 'Use My GPS'}</span>
                       </button>
                     </div>
-                    {gpsStatusMessage && (
-                      <p className="text-[10px] text-emerald-300 font-mono mt-0.5 animate-in fade-in truncate">
-                        {gpsStatusMessage}
-                      </p>
-                    )}
-                    <select
-                      id="rider-select-pickup"
-                      value={pickup.id}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val.startsWith('saved_') && customerUser?.savedPlaces) {
-                          const saved = customerUser.savedPlaces.find((s) => `saved_${s.id}` === val);
-                          if (saved) onSelectPickup(savedPlaceToLocationPoint(saved));
-                          return;
-                        }
-                        const found = SRI_LANKA_LOCATIONS.find((l) => l.id === val);
-                        if (found) onSelectPickup(found);
-                      }}
-                      className="w-full bg-transparent text-white font-medium text-xs focus:outline-none cursor-pointer py-1"
+
+                    {/* Intermediate Stops if any */}
+                    {intermediateStops.map((stop, idx) => (
+                      <div key={stop.id} className="flex items-center gap-2 p-2 bg-slate-900 rounded-lg border border-sky-500/30">
+                        <div className="w-5 h-5 rounded bg-sky-500/20 text-sky-400 text-[10px] font-bold flex items-center justify-center">
+                          {idx + 1}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingStopIndex(idx);
+                            setSearchModalMode('stop');
+                          }}
+                          className="flex-1 text-left min-w-0"
+                        >
+                          <span className="text-[9px] text-sky-400 font-bold uppercase block">{t.stop} {idx + 1}</span>
+                          <p className="text-xs text-white truncate">{stop.name}</p>
+                        </button>
+                        {onRemoveStop && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveStop(idx)}
+                            className="p-1 text-slate-500 hover:text-rose-400"
+                            title={t.removeStop}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Destination Dropoff Input Card */}
+                    <button
+                      type="button"
+                      id="uber-dropoff-trigger"
+                      onClick={() => setSearchModalMode('dropoff')}
+                      className="w-full p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-700/80 hover:border-emerald-500/60 rounded-xl text-left transition-all group"
                     >
-                      {/* Customer Saved Places Group */}
-                      {customerUser?.isLoggedIn && customerUser.savedPlaces && customerUser.savedPlaces.length > 0 && (
-                        <optgroup label="⭐ My Saved Places" className="bg-slate-900 text-amber-400 font-bold">
-                          {customerUser.savedPlaces.map((sp) => (
-                            <option key={`pick_saved_${sp.id}`} value={`saved_${sp.id}`} className="bg-slate-900 text-white font-normal">
-                              {sp.label}: {sp.name} ({sp.city})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        {t.destination}
+                      </span>
+                      <p className="text-xs font-bold text-white group-hover:text-emerald-300 truncate mt-0.5">
+                        {dropoff.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 truncate">
+                        {dropoff.address} · {dropoff.city}
+                      </p>
+                    </button>
+                  </div>
 
-                      {/* Live GPS Option if active */}
-                      {pickup.popularTag === 'Live GPS' && (
-                        <optgroup label="📍 Detected Device Location" className="bg-slate-900 text-emerald-400 font-bold">
-                          <option value={pickup.id} className="bg-slate-900 text-emerald-300 font-bold">
-                            {pickup.name} ({pickup.city})
-                          </option>
-                        </optgroup>
-                      )}
-
-                      <optgroup label="🏙️ Colombo (Capital & Port City)" className="bg-slate-900 text-emerald-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Colombo').map((loc) => (
-                          <option key={`pick_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="🛕 Kandy (Sacred Hill Capital & Lake)" className="bg-slate-900 text-amber-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Kandy').map((loc) => (
-                          <option key={`pick_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="🐘 Kurunegala (Elephant Rock & Wayamba)" className="bg-slate-900 text-purple-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Kurunegala').map((loc) => (
-                          <option key={`pick_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="✈️ Negombo (CMB Airport & Golden Beach)" className="bg-slate-900 text-sky-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Negombo').map((loc) => (
-                          <option key={`pick_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
+                  {/* Right Swap Button */}
+                  <div className="flex flex-col items-center justify-center pl-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      id="uber-swap-route-btn"
+                      onClick={handleSwapLocations}
+                      className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-slate-700 rounded-xl transition-all shadow-sm"
+                      title="Swap pickup and destination"
+                    >
+                      <ArrowUpDown className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                {/* Intermediate Stops if added */}
-                {intermediateStops.map((stop, idx) => (
-                  <div key={stop.id} className="flex items-center gap-3 pl-1 bg-slate-900/60 p-2 rounded-lg border border-sky-500/20">
-                    <div className="w-6 h-6 rounded-md bg-sky-500/20 text-sky-400 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                      {idx + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[9px] font-bold text-sky-400 uppercase tracking-wider block">
-                        {t.stop} {idx + 1}
-                      </span>
-                      <p className="text-xs text-slate-200 font-medium truncate">{stop.name}</p>
-                    </div>
-                    {onRemoveStop && (
-                      <button
-                        type="button"
-                        onClick={() => onRemoveStop(idx)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors"
-                        title={t.removeStop}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                {/* Add Intermediate Stop Button (Multi-Stop Route) */}
+                {/* Multi-Stop Add Button */}
                 {intermediateStops.length < 2 && (
-                  <div className="pl-11">
+                  <div className="flex justify-end pt-1">
                     <button
                       type="button"
-                      id="add-intermediate-stop-btn"
+                      id="uber-add-stop-btn"
                       onClick={handleAddIntermediateStop}
-                      className="text-xs text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1 transition-colors"
+                      className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1 transition-colors"
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="w-3 h-3" />
                       <span>{t.addStop}</span>
                     </button>
                   </div>
                 )}
-
-                {/* Quick Swap Button */}
-                <div className="relative flex items-center justify-center my-0.5">
-                  <div className="w-full h-[1px] bg-slate-800"></div>
-                  <button
-                    type="button"
-                    id="swap-pickup-dropoff-btn"
-                    onClick={handleSwapLocations}
-                    className="absolute px-2.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-slate-700 rounded-full text-[10px] font-semibold flex items-center gap-1 transition-all shadow-sm"
-                    title="Swap Pickup & Destination"
-                  >
-                    <ArrowUpDown className="w-3 h-3" />
-                    <span>Swap Route</span>
-                  </button>
-                </div>
-
-                {/* Destination Dropoff */}
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0">
-                    <Navigation className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                      {t.destination}
-                    </label>
-                    <select
-                      id="rider-select-dropoff"
-                      value={dropoff.id}
-                      onChange={(e) => {
-                        const found = SRI_LANKA_LOCATIONS.find((l) => l.id === e.target.value);
-                        if (found) onSelectDropoff(found);
-                      }}
-                      className="w-full bg-transparent text-white font-medium text-xs focus:outline-none cursor-pointer py-1"
-                    >
-                      <optgroup label="🏙️ Colombo (Capital & Port City)" className="bg-slate-900 text-emerald-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Colombo').map((loc) => (
-                          <option key={`drop_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="🛕 Kandy (Sacred Hill Capital & Lake)" className="bg-slate-900 text-amber-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Kandy').map((loc) => (
-                          <option key={`drop_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="🐘 Kurunegala (Elephant Rock & Wayamba)" className="bg-slate-900 text-purple-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Kurunegala').map((loc) => (
-                          <option key={`drop_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="✈️ Negombo (CMB Airport & Golden Beach)" className="bg-slate-900 text-sky-400 font-bold">
-                        {SRI_LANKA_LOCATIONS.filter((l) => l.city === 'Negombo').map((loc) => (
-                          <option key={`drop_${loc.id}`} value={loc.id} className="bg-slate-900 text-white font-normal">
-                            {loc.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  </div>
-                </div>
               </div>
 
-              {/* Quick Popular Landmarks (Filtered by Selected Hub) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                <span className="text-[11px] text-slate-400 flex-shrink-0 mr-1 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-emerald-400" />
-                  Popular:
-                </span>
-                {(selectedCityHub && selectedCityHub !== 'all'
-                  ? SRI_LANKA_LOCATIONS.filter((l) => l.city.toLowerCase() === selectedCityHub.toLowerCase())
-                  : SRI_LANKA_LOCATIONS.filter((l) => l.popularTag)
-                ).slice(0, 7).map((loc) => (
+              {/* 1-Tap Quick Destinations (Uber-style Instant Picks) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Where to? (1-Tap Quick Destinations)</span>
+                  </span>
                   <button
-                    key={loc.id}
-                    onClick={() => onSelectDropoff(loc)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors border flex items-center gap-1 ${
-                      dropoff.id === loc.id
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:border-slate-600'
-                    }`}
+                    type="button"
+                    onClick={() => setSearchModalMode('dropoff')}
+                    className="text-emerald-400 hover:text-emerald-300 text-[11px] font-semibold flex items-center gap-0.5"
                   >
-                    <span>{loc.name.split(' ')[0]}</span>
-                    <span className="text-[9px] text-slate-400 opacity-80 font-normal">({loc.city})</span>
+                    Search all <ChevronRight className="w-3 h-3" />
                   </button>
-                ))}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'loc_airport_cmb', name: "CMB Airport", city: 'Negombo', icon: '✈️' },
+                    { id: 'loc_galle_fort', name: 'Galle Fort', city: 'Galle', icon: '🏰' },
+                    { id: 'loc_fort_station', name: 'Fort Railway', city: 'Colombo', icon: '🚆' },
+                    { id: 'loc_kandy_tooth', name: 'Tooth Temple', city: 'Kandy', icon: '🛕' },
+                    { id: 'loc_unawatuna_beach', name: 'Unawatuna Beach', city: 'Galle', icon: '🌊' },
+                    { id: 'loc_one_galle_face', name: 'One Galle Face', city: 'Colombo', icon: '🏙️' },
+                  ].map((item) => {
+                    const isSelected = dropoff.id === item.id;
+                    const targetLoc = SRI_LANKA_LOCATIONS.find((l) => l.id === item.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (targetLoc) onSelectDropoff(targetLoc);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                          isSelected
+                            ? 'bg-emerald-500/20 border-emerald-500 text-white ring-1 ring-emerald-500/40 shadow-sm'
+                            : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+                        }`}
+                      >
+                        <span className="text-base flex-shrink-0">{item.icon}</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold truncate leading-tight">{item.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{item.city}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Advance Booking & Airport Transfer Toggle */}
@@ -1353,179 +1580,155 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                 </div>
               </div>
 
-              {/* Split Fare Calculator with Friends */}
-              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-bold text-white">{t.splitFare}</span>
-                  </div>
-                  <button
-                    onClick={() => setShowSplitFare(!showSplitFare)}
-                    className="text-[11px] font-semibold text-emerald-400 hover:underline"
-                  >
-                    {showSplitFare ? 'Hide' : 'Calculate'}
-                  </button>
-                </div>
-
-                {showSplitFare && (
-                  <div className="pt-2 border-t border-slate-800/80 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">{t.splitWith}:</span>
-                      <div className="flex items-center gap-1">
-                        {[2, 3, 4, 5].map((num) => (
-                          <button
-                            key={num}
-                            onClick={() => setSplitRidersCount(num)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
-                              splitRidersCount === num
-                                ? 'bg-emerald-500 text-slate-950'
-                                : 'bg-slate-800 text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            {num}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2 bg-slate-900 rounded-lg">
-                      <span className="text-slate-300">Each rider pays:</span>
-                      <span className="font-extrabold text-emerald-400 text-sm font-heading">
-                        LKR {Math.round(fare.totalLkr / splitRidersCount).toLocaleString()} {t.perPerson}
-                      </span>
-                    </div>
-
-                    <a
-                      href={`https://wa.me/?text=${encodeURIComponent(
-                        `Hey! Let's split our Naspick ride from ${pickup.name} to ${dropoff.name}. Total: LKR ${fare.totalLkr}, our share is LKR ${Math.round(
-                          fare.totalLkr / splitRidersCount
-                        )} each.`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>{t.sendSplitWhatsapp}</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              {/* Promo Code Input */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    id="rider-promo-input"
-                    type="text"
-                    placeholder={t.promoCodePlaceholder}
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    className="w-full py-2 pl-3 pr-8 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-white uppercase placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                  />
-                  {appliedDiscount > 0 && (
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400 absolute right-2.5 top-2.5" />
-                  )}
-                </div>
+              {/* Optional Trip Preferences (Promo Code & Split Fare) */}
+              <div className="flex items-center gap-2 pt-1 text-xs">
                 <button
-                  onClick={handleApplyPromo}
-                  className="py-2 px-3.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-xl transition-colors"
+                  type="button"
+                  onClick={() => setShowSplitFare(!showSplitFare)}
+                  className={`flex-1 py-2 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
+                    showSplitFare || splitShared
+                      ? 'bg-slate-800 border-emerald-500/50 text-emerald-300'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
                 >
-                  {t.apply}
+                  <Users className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{showSplitFare ? 'Hide Split' : 'Split Fare'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPromoCode(promoCode ? '' : 'AYUBOWAN')}
+                  className={`flex-1 py-2 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
+                    appliedDiscount > 0
+                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{appliedDiscount > 0 ? `Rs. ${appliedDiscount} Off` : 'Promo Code'}</span>
                 </button>
               </div>
-              {promoSuccess && <p className="text-[11px] text-emerald-400 font-medium -mt-2">{promoSuccess}</p>}
-              {promoError && <p className="text-[11px] text-rose-400 font-medium -mt-2">{promoError}</p>}
 
-              {/* Payment Method Selector (PayHere, Cash, Card, LankaQR) */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                  {t.paymentMethod}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    id="pay-method-cash"
-                    onClick={() => setPaymentMethod('cash')}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all ${
-                      paymentMethod === 'cash'
-                        ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Banknote className="w-4 h-4 text-emerald-400" />
-                    <span>{t.cashToDriver}</span>
-                  </button>
-
-                  <button
-                    id="pay-method-card"
-                    onClick={() => setPaymentMethod('card')}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all ${
-                      paymentMethod === 'card'
-                        ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 text-sky-400" />
-                    <span>{t.visaMaster}</span>
-                  </button>
-
-                  <button
-                    id="pay-method-payhere"
-                    onClick={() => setPaymentMethod('payhere')}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all ${
-                      paymentMethod === 'payhere'
-                        ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <div className="w-3.5 h-3.5 rounded bg-amber-500 text-slate-950 font-bold text-[8px] flex items-center justify-center">
-                      P
+              {/* Promo Code Drawer */}
+              {promoCode !== '' && (
+                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        id="rider-promo-input"
+                        type="text"
+                        placeholder="Enter AYUBOWAN or NASPICK10"
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value)}
+                        className="w-full py-2 pl-3 pr-8 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white uppercase placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                      />
+                      {appliedDiscount > 0 && (
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 absolute right-2.5 top-2.5" />
+                      )}
                     </div>
-                    <span>{t.payhereGateway}</span>
-                  </button>
-
-                  <button
-                    id="pay-method-lankaqr"
-                    onClick={() => {
-                      setPaymentMethod('lankaqr');
-                      setShowLankaQrModal(true);
-                    }}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all ${
-                      paymentMethod === 'lankaqr'
-                        ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <div className="w-3.5 h-3.5 rounded bg-emerald-600 text-white font-bold text-[8px] flex items-center justify-center">
-                      QR
-                    </div>
-                    <span>{t.lankaQrGenie}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyPromo}
+                      className="py-2 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-colors"
+                    >
+                      {t.apply}
+                    </button>
+                  </div>
+                  {promoSuccess && <p className="text-[11px] text-emerald-400 font-medium">{promoSuccess}</p>}
+                  {promoError && <p className="text-[11px] text-rose-400 font-medium">{promoError}</p>}
                 </div>
-              </div>
+              )}
 
-              {/* Fare Summary & Request CTA */}
-              <div className="pt-2 border-t border-slate-800">
-                <div className="flex items-center justify-between mb-3 text-xs">
-                  <button
-                    onClick={() => setShowFareBreakdown(!showFareBreakdown)}
-                    className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 text-[11px] underline decoration-slate-600"
-                  >
-                    <Info className="w-3.5 h-3.5" />
-                    <span>{showFareBreakdown ? t.hideBreakdown : t.viewBreakdown}</span>
-                  </button>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-400 mr-1">{t.total}:</span>
-                    <span className="text-lg font-black text-white font-heading">
-                      LKR {fare.totalLkr.toLocaleString()}
+              {/* Split Fare Calculator with Friends */}
+              {showSplitFare && (
+                <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2 animate-in fade-in text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">{t.splitWith}:</span>
+                    <div className="flex items-center gap-1">
+                      {[2, 3, 4, 5].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setSplitRidersCount(num)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
+                            splitRidersCount === num
+                              ? 'bg-emerald-500 text-slate-950'
+                              : 'bg-slate-800 text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 bg-slate-900 rounded-lg">
+                    <span className="text-slate-300">Each rider pays:</span>
+                    <span className="font-extrabold text-emerald-400 text-sm font-heading">
+                      LKR {Math.round(fare.totalLkr / splitRidersCount).toLocaleString()} {t.perPerson}
                     </span>
+                  </div>
+
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(
+                      `Hey! Let's split our Naspick ride from ${pickup.name} to ${dropoff.name}. Total: LKR ${fare.totalLkr}, our share is LKR ${Math.round(
+                        fare.totalLkr / splitRidersCount
+                      )} each.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>{t.sendSplitWhatsapp}</span>
+                  </a>
+                </div>
+              )}
+
+              {/* Uber-Style Bottom Sticky Booking Bar */}
+              <div className="pt-3 border-t border-slate-800 space-y-3">
+                {/* Fare Summary & Payment Selector Row */}
+                <div className="flex items-center justify-between gap-2 bg-slate-950/90 p-3 rounded-2xl border border-slate-800">
+                  {/* Interactive Payment Method Pill */}
+                  <button
+                    type="button"
+                    id="uber-payment-pill-btn"
+                    onClick={() => setShowPaymentModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-500/60 rounded-xl transition-all text-xs font-semibold group"
+                  >
+                    {paymentMethod === 'cash' ? (
+                      <Banknote className="w-4 h-4 text-emerald-400" />
+                    ) : paymentMethod === 'card' ? (
+                      <CreditCard className="w-4 h-4 text-sky-400" />
+                    ) : (
+                      <div className="w-4 h-4 rounded bg-emerald-600 text-white font-bold text-[8px] flex items-center justify-center">
+                        QR
+                      </div>
+                    )}
+                    <span className="text-white capitalize">
+                      {paymentMethod === 'cash' ? 'Cash' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'lankaqr' ? 'LankaQR' : 'PayHere'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 group-hover:text-emerald-300">▾</span>
+                  </button>
+
+                  {/* Fare Display & Breakdown Toggle */}
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setShowFareBreakdown(!showFareBreakdown)}
+                      className="text-xs text-slate-400 hover:text-emerald-400 underline decoration-slate-600"
+                    >
+                      {showFareBreakdown ? 'Hide details' : 'Fare details'}
+                    </button>
+                    <p className="text-lg font-black text-white font-heading leading-none mt-0.5">
+                      LKR {fare.totalLkr.toLocaleString()}
+                    </p>
                   </div>
                 </div>
 
-                {/* Breakdown Accordion */}
+                {/* Breakdown Accordion if toggled */}
                 {showFareBreakdown && (
-                  <div className="p-3 mb-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] space-y-1.5 text-slate-300 animate-in fade-in">
+                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] space-y-1.5 text-slate-300 animate-in fade-in">
                     <div className="flex justify-between">
                       <span>Base Fare ({selectedVehicle.name})</span>
                       <span>LKR {fare.baseFare}</span>
@@ -1557,26 +1760,34 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                       </div>
                     )}
                     <div className="flex justify-between text-slate-500 text-[10px] pt-1 border-t border-slate-800">
-                      <span>Platform safety & automated SMS fees included</span>
+                      <span>Transparent Sri Lanka tariff · No hidden fees</span>
                       <span>✓</span>
                     </div>
                   </div>
                 )}
 
-                {/* Main CTA */}
+                {/* Primary Uber-Style Request Button */}
                 <button
+                  type="button"
                   id="rider-confirm-book-button"
                   onClick={handleProceedBooking}
-                  className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+                  className="w-full py-4 px-5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-slate-950 font-extrabold text-base rounded-2xl shadow-xl shadow-emerald-500/20 transition-all flex items-center justify-between"
                 >
-                  <span>
-                    {t.confirmRide} {selectedVehicle.name.split(' ')[1]}
-                    {isScheduled ? ` (${scheduledDateTime})` : ''}
-                  </span>
-                  <ChevronRight className="w-4 h-4" />
+                  <div className="flex items-center gap-2">
+                    <Car className="w-5 h-5 text-slate-950" />
+                    <span>
+                      Request {selectedVehicle.name.split(' ')[1] || selectedVehicle.name}
+                      {isScheduled ? ` (${scheduledDateTime})` : ''}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 font-heading text-lg font-black">
+                    <span>LKR {fare.totalLkr.toLocaleString()}</span>
+                    <ChevronRight className="w-5 h-5" />
+                  </div>
                 </button>
-                <p className="text-center text-[10px] text-slate-500 mt-2">
-                  SMS alerts sent to contact {PRIMARY_SAFETY_CONTACT} & your device with OTP security.
+
+                <p className="text-center text-[10px] text-slate-400">
+                  Instant driver match with GPS tracking & automated SMS security to <strong>{PRIMARY_SAFETY_CONTACT}</strong>.
                 </p>
               </div>
             </div>
@@ -1625,6 +1836,65 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
           driver={activeRide.driver}
         />
       )}
+
+      {/* Uber-Style Instant Location Search Modal */}
+      <UberLocationSearchModal
+        isOpen={searchModalMode !== null}
+        onClose={() => {
+          setSearchModalMode(null);
+          setEditingStopIndex(null);
+        }}
+        title={
+          searchModalMode === 'pickup'
+            ? 'Set Pickup Location'
+            : searchModalMode === 'dropoff'
+            ? 'Where to?'
+            : `Set Stop ${editingStopIndex !== null ? editingStopIndex + 1 : ''}`
+        }
+        placeholder={
+          searchModalMode === 'pickup'
+            ? 'Search pickup address, hotel, station...'
+            : 'Where to? Search destination, airport, beach...'
+        }
+        currentPoint={
+          searchModalMode === 'pickup'
+            ? pickup
+            : searchModalMode === 'dropoff'
+            ? dropoff
+            : (editingStopIndex !== null && intermediateStops[editingStopIndex]) || dropoff
+        }
+        onSelectLocation={(loc) => {
+          if (searchModalMode === 'pickup') {
+            onSelectPickup(loc);
+            setActiveStep('planning');
+            // User requirement: after choosing current location, open and choose destination
+            setSearchModalMode('dropoff');
+            return;
+          } else if (searchModalMode === 'dropoff') {
+            onSelectDropoff(loc);
+            setActiveStep('planning');
+          } else if (searchModalMode === 'stop' && editingStopIndex !== null) {
+            if (onAddStop) {
+              onAddStop(loc);
+            }
+          }
+          setSearchModalMode(null);
+          setEditingStopIndex(null);
+        }}
+        onDetectGps={handleDetectGpsLocation}
+        isDetectingGps={isDetectingGps}
+        customerUser={customerUser}
+        mode={searchModalMode || 'dropoff'}
+      />
+
+      {/* Payment Method Selector Modal */}
+      <PaymentMethodSelectorModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        currentMethod={paymentMethod}
+        onSelectMethod={(m) => setPaymentMethod(m)}
+        onOpenLankaQr={() => setShowLankaQrModal(true)}
+      />
     </div>
   );
 };

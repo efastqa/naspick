@@ -14,7 +14,7 @@ import {
   Car,
   Crosshair
 } from 'lucide-react';
-import { LocationPoint, Driver, Ride } from '../../types';
+import { LocationPoint, Driver, Ride, CityHubId, DriverPickupTracking } from '../../types';
 
 interface SriLankaMapProps {
   pickup: LocationPoint;
@@ -25,8 +25,11 @@ interface SriLankaMapProps {
   userRole: 'rider' | 'driver' | 'admin';
   onSelectPickup?: (point: LocationPoint) => void;
   onSelectDropoff?: (point: LocationPoint) => void;
-  selectedCityHub?: 'all' | 'colombo' | 'kandy' | 'kurunegala' | 'negombo';
-  onSelectCityHub?: (hub: 'all' | 'colombo' | 'kandy' | 'kurunegala' | 'negombo') => void;
+  selectedCityHub?: CityHubId;
+  onSelectCityHub?: (hub: CityHubId) => void;
+  pickupTracking?: DriverPickupTracking | null;
+  onToggleFollowDriver?: () => void;
+  isFollowDriverActive?: boolean;
 }
 
 export const SriLankaMap: React.FC<SriLankaMapProps> = ({
@@ -38,6 +41,9 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
   userRole,
   selectedCityHub = 'all',
   onSelectCityHub,
+  pickupTracking,
+  onToggleFollowDriver,
+  isFollowDriverActive = true,
 }) => {
   const [zoom, setZoom] = useState(1);
   const [mapMode, setMapMode] = useState<'streets' | 'satellite'>('streets');
@@ -67,7 +73,10 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
 
   // When city hub changes, gently adjust pan & zoom
   useEffect(() => {
-    if (selectedCityHub === 'colombo') {
+    if (selectedCityHub === 'galle') {
+      setZoom(1.35);
+      setPanOffset({ x: 20, y: -130 });
+    } else if (selectedCityHub === 'colombo') {
       setZoom(1.35);
       setPanOffset({ x: 80, y: -60 });
     } else if (selectedCityHub === 'kandy') {
@@ -121,14 +130,13 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
 
   const handleTouchEnd = () => setIsDragging(false);
 
-  // Geographic Bounding Box covering Colombo, Negombo, Kurunegala, and Kandy:
-  // Latitudes: 6.74 (Mount Lavinia / Moratuwa south) to 7.60 (Kurunegala north)
-  // Longitudes: 79.72 (Negombo/Colombo west coast waters) to 80.82 (Kandy east hills)
-  // Maps comfortably into 800x600 SVG with ample 90px margins so Kurunegala and Kandy badges never clip.
-  const minLat = 6.72;
-  const maxLat = 7.62;
-  const minLng = 79.72;
-  const maxLng = 80.82;
+  // Geographic Bounding Box covering Galle, Colombo, Negombo, Kurunegala, and Kandy:
+  // Latitudes: 5.92 (Galle / Mirissa south coast) to 7.68 (Kurunegala north)
+  // Longitudes: 79.68 (Negombo/Colombo west coast waters) to 80.95 (Kandy east hills)
+  const minLat = 5.92;
+  const maxLat = 7.68;
+  const minLng = 79.68;
+  const maxLng = 80.95;
 
   const projectCoord = (lat: number, lng: number) => {
     const clampedLat = Math.min(Math.max(lat, minLat), maxLat);
@@ -145,25 +153,58 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
 
   // Key Target City Anchors projected onto SVG
   const colomboCenter = projectCoord(6.9271, 79.8612);
+  const galleCenter = projectCoord(6.0535, 80.2210);
   const kandyCenter = projectCoord(7.2936, 80.6385);
   const kurunegalaCenter = projectCoord(7.4863, 80.3623);
   const negomboCenter = projectCoord(7.2083, 79.8358);
   const airportCenter = projectCoord(7.1808, 79.8841);
 
-  // Interpolated driver position along route
-  const currentDriverPoint = {
-    x: pickupPoint.x + (dropoffPoint.x - pickupPoint.x) * driverPosPercent,
-    y: pickupPoint.y + (dropoffPoint.y - pickupPoint.y) * driverPosPercent,
-  };
+  // Check if driver is en route to pickup
+  const isApproachingPickup = Boolean(
+    activeRide && (activeRide.status === 'accepted' || activeRide.status === 'arriving')
+  );
+
+  // Initial driver origin: offset by ~1.6km from pickup so movement to pickup is clearly visible on map
+  const driverOriginLat = activeRide?.driver?.currentLat && Math.abs(activeRide.driver.currentLat - pickup.lat) > 0.003
+    ? activeRide.driver.currentLat
+    : pickup.lat + 0.013;
+  const driverOriginLng = activeRide?.driver?.currentLng && Math.abs(activeRide.driver.currentLng - pickup.lng) > 0.003
+    ? activeRide.driver.currentLng
+    : pickup.lng - 0.014;
+  const driverOriginPoint = projectCoord(driverOriginLat, driverOriginLng);
+
+  // Real-time progress (from pickupTracking or local animation)
+  const currentProgress = pickupTracking ? pickupTracking.progressPercent : driverPosPercent;
+
+  // Driver SVG coordinate:
+  // If approaching pickup, moves from driverOriginPoint towards pickupPoint!
+  // If in_progress trip, moves from pickupPoint towards dropoffPoint!
+  const currentDriverPoint = isApproachingPickup
+    ? {
+        x: driverOriginPoint.x + (pickupPoint.x - driverOriginPoint.x) * currentProgress,
+        y: driverOriginPoint.y + (pickupPoint.y - driverOriginPoint.y) * currentProgress,
+      }
+    : {
+        x: pickupPoint.x + (dropoffPoint.x - pickupPoint.x) * currentProgress,
+        y: pickupPoint.y + (dropoffPoint.y - pickupPoint.y) * currentProgress,
+      };
 
   // Route vector angle in degrees (screen coordinate system: 0 deg = East, 90 deg = South)
-  const routeDeltaX = dropoffPoint.x - pickupPoint.x;
-  const routeDeltaY = dropoffPoint.y - pickupPoint.y;
+  const targetPoint = isApproachingPickup ? pickupPoint : dropoffPoint;
+  const startPoint = isApproachingPickup ? driverOriginPoint : pickupPoint;
+  const routeDeltaX = targetPoint.x - startPoint.x;
+  const routeDeltaY = targetPoint.y - startPoint.y;
   const routeAngleDeg = Math.round((Math.atan2(routeDeltaY, routeDeltaX) * 180) / Math.PI);
-  // Default to driver's heading if provided, otherwise route travel orientation
-  const effectiveDriverHeading = activeRide?.driver?.heading !== undefined 
-    ? activeRide.driver.heading 
-    : (routeAngleDeg + 360) % 360;
+  const effectiveDriverHeading = (routeAngleDeg + 360) % 360;
+
+  // Auto-follow driver with camera when enabled
+  useEffect(() => {
+    if (isFollowDriverActive && isApproachingPickup && currentDriverPoint.x && currentDriverPoint.y) {
+      const targetPanX = Math.round((400 - currentDriverPoint.x) * 0.45);
+      const targetPanY = Math.round((300 - currentDriverPoint.y) * 0.45);
+      setPanOffset({ x: targetPanX, y: targetPanY });
+    }
+  }, [currentDriverPoint.x, currentDriverPoint.y, isFollowDriverActive, isApproachingPickup]);
 
   // Cardinal direction helper
   const getCompassDirection = (deg: number): string => {
@@ -243,10 +284,9 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
         {/* Indian Ocean Backdrop */}
         <rect width="800" height="600" fill="url(#oceanGrad)" />
 
-        {/* Western Coastline & Sri Lanka Landmass Outline */}
-        {/* Curving from Chilaw/Negombo coast down through Colombo to Mount Lavinia and inland towards Kandy */}
+        {/* Western & Southern Coastline & Sri Lanka Landmass Outline */}
         <path
-          d="M 120 0 C 135 100 150 180 158 260 C 168 350 178 450 205 600 L 800 600 L 800 0 Z"
+          d="M 120 0 C 135 100 150 180 158 240 C 168 320 220 420 340 500 C 440 540 600 520 800 500 L 800 0 Z"
           fill="url(#landGrad)"
           stroke="#1e293b"
           strokeWidth="1.5"
@@ -275,6 +315,16 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
         />
 
         {/* ================= MAJOR HIGHWAYS & EXPRESSWAYS ================= */}
+
+        {/* E01 Southern Expressway: Colombo ⇄ Dodangoda ⇄ Galle */}
+        <path
+          d={`M ${colomboCenter.x + 8} ${colomboCenter.y + 10} Q ${colomboCenter.x + 20} ${(colomboCenter.y + galleCenter.y) / 2} ${galleCenter.x} ${galleCenter.y - 12}`}
+          fill="none"
+          stroke="#0d9488"
+          strokeWidth="4.5"
+          strokeLinecap="round"
+          strokeDasharray="6 3"
+        />
 
         {/* E03 Colombo - Katunayake Airport Expressway */}
         <path
@@ -369,6 +419,39 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
           </g>
         )}
 
+        {/* ================= DRIVER PICKUP APPROACH PATH (LIVE TRACKING TO PICKUP) ================= */}
+        {isApproachingPickup && (
+          <g id="driver-pickup-approach-route">
+            {/* Glow underlay */}
+            <path
+              d={`M ${driverOriginPoint.x} ${driverOriginPoint.y} Q ${(driverOriginPoint.x + pickupPoint.x) / 2 - 15} ${(driverOriginPoint.y + pickupPoint.y) / 2 + 15} ${pickupPoint.x} ${pickupPoint.y}`}
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="7"
+              strokeLinecap="round"
+              opacity="0.3"
+              filter="url(#glowEffect)"
+            />
+            {/* Animated dashed green approach path */}
+            <path
+              d={`M ${driverOriginPoint.x} ${driverOriginPoint.y} Q ${(driverOriginPoint.x + pickupPoint.x) / 2 - 15} ${(driverOriginPoint.y + pickupPoint.y) / 2 + 15} ${pickupPoint.x} ${pickupPoint.y}`}
+              fill="none"
+              stroke="#34d399"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray="8 6"
+              className="animate-[dash_1.2s_linear_infinite]"
+            />
+            {/* Midpoint Distance Badge */}
+            <g transform={`translate(${(driverOriginPoint.x + pickupPoint.x) / 2 - 15}, ${(driverOriginPoint.y + pickupPoint.y) / 2 + 15})`}>
+              <rect x="-48" y="-10" width="96" height="20" rx="10" fill="#022c22" stroke="#10b981" strokeWidth="1.2" />
+              <text x="0" y="3.5" textAnchor="middle" fill="#34d399" fontSize="8" fontWeight="bold">
+                {pickupTracking ? `${pickupTracking.distanceMeters}m to Pickup` : 'Approach to Pickup'}
+              </text>
+            </g>
+          </g>
+        )}
+
         {/* ================= ACTIVE TRIP ROUTE POLYLINE ================= */}
         <g>
           {intermediateStops.length > 0 ? (
@@ -430,7 +513,22 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
           )}
         </g>
 
-        {/* ================= 4 PRIMARY FOCUS HUB BADGES ON MAP ================= */}
+        {/* ================= PRIMARY FOCUS HUB BADGES ON MAP ================= */}
+        {/* GALLE HUB (UNESCO DUTCH FORT & SOUTH COAST) */}
+        <g 
+          transform={`translate(${galleCenter.x}, ${galleCenter.y})`} 
+          className="cursor-pointer hover:opacity-90 transition-opacity"
+          onClick={(e) => { e.stopPropagation(); onSelectCityHub?.('galle'); }}
+        >
+          <circle cx="0" cy="0" r="26" fill="#14b8a6" opacity="0.18" />
+          <circle cx="0" cy="0" r="10" fill="#0f172a" stroke="#14b8a6" strokeWidth="2.5" />
+          <text x="0" y="3.5" textAnchor="middle" fill="#14b8a6" fontSize="9" fontWeight="bold">G</text>
+          <rect x="-35" y="15" width="70" height="19" rx="4" fill="#090d16" stroke="#14b8a6" strokeWidth="1" opacity="0.95" />
+          <text x="0" y="28" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="bold">
+            GALLE
+          </text>
+        </g>
+
         {/* COLOMBO HUB */}
         <g 
           transform={`translate(${colomboCenter.x}, ${colomboCenter.y})`} 

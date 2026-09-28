@@ -11,7 +11,8 @@ import {
   Download,
   Lock,
   Navigation,
-  Sparkles
+  Sparkles,
+  History
 } from 'lucide-react';
 import { NaspickLogo } from '../Common/NaspickLogo';
 import { LanguageSwitcher } from '../Common/LanguageSwitcher';
@@ -31,6 +32,8 @@ interface NavbarProps {
   onSelectLanguage: (lang: Language) => void;
   customerUser?: CustomerUser | null;
   onOpenCustomerAuth?: () => void;
+  onOpenTripHistory?: () => void;
+  pastTripsCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -46,13 +49,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectLanguage,
   customerUser,
   onOpenCustomerAuth,
+  onOpenTripHistory,
+  pastTripsCount = 0,
 }) => {
   return (
     <header className="w-full bg-slate-950/90 border-b border-slate-800 backdrop-blur-md sticky top-0 z-40 px-3 sm:px-4 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 flex-wrap sm:flex-nowrap">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <NaspickLogo size="md" />
+        {/* Brand Logo in Top-Left Corner */}
+        <div 
+          onClick={() => onSelectRole('rider')} 
+          className="flex items-center gap-2 sm:gap-3 flex-shrink-0 cursor-pointer py-0.5"
+          title="Return to Naspick Home"
+        >
+          <NaspickLogo size="lg" />
         </div>
 
         {/* Primary Role Switcher (Rider | Driver Partner | Admin Control) */}
@@ -154,8 +163,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Right Tools: Customer Sign-In / Profile, PWA Install, Language Switcher, Settings & SMS Drawer Button */}
+        {/* Right Tools: Activity / Trips History, Customer Sign-In / Profile, PWA Install, Language Switcher, Settings & SMS Drawer Button */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Activity / Trips History Button */}
+          {onOpenTripHistory && (
+            <button
+              id="navbar-trips-history-btn"
+              onClick={onOpenTripHistory}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-emerald-400 transition-all shadow-sm"
+              title="Your Trips & Activity History"
+            >
+              <History className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Activity</span>
+              {pastTripsCount > 0 && (
+                <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full font-mono">
+                  {pastTripsCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Customer Auth / Profile Button */}
           {customerUser?.isLoggedIn ? (
             <button

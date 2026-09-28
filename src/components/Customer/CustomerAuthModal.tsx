@@ -111,7 +111,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     }
 
     const newUser: CustomerUser = {
-      id: customerUser?.id || `cust_${Date.now()}`,
+      id: customerUser?.id || `cust_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: overrideName || nameInput || 'Valued Customer',
       phone: phoneInput || '+94 77 982 1092',
       email: overrideEmail || emailInput || 'customer@naspick.lk',

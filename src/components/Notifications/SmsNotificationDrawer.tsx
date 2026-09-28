@@ -86,9 +86,9 @@ export const SmsNotificationDrawer: React.FC<SmsNotificationDrawerProps> = ({
                 No SMS dispatched yet. Book a ride to trigger automated SMS updates!
               </div>
             ) : (
-              smsList.map((sms) => (
+              smsList.map((sms, index) => (
                 <div
-                  key={sms.id}
+                  key={`${sms.id || 'sms'}_${index}`}
                   className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 shadow-sm relative space-y-2 text-xs"
                 >
                   {/* SMS Metadata */}
@@ -122,9 +122,9 @@ export const SmsNotificationDrawer: React.FC<SmsNotificationDrawerProps> = ({
               No push notifications yet.
             </div>
           ) : (
-            pushList.map((push) => (
+            pushList.map((push, index) => (
               <div
-                key={push.id}
+                key={`${push.id || 'push'}_${index}`}
                 className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-start gap-3 text-xs"
               >
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0 mt-0.5">

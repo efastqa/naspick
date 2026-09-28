@@ -24,12 +24,14 @@ interface DeliveryFormProps {
   dropoff: LocationPoint;
   onSelectPickup: (loc: LocationPoint) => void;
   onSelectDropoff: (loc: LocationPoint) => void;
-  onSubmitDelivery: (details: DeliveryDetails, totalLkr: number) => void;
+  onSubmitDelivery: (details: DeliveryDetails, totalLkr: number, vehicleCategory?: 'moto' | 'tuk' | 'van') => void;
 }
 
 export const DeliveryForm: React.FC<DeliveryFormProps> = ({
   pickup,
   dropoff,
+  onSelectPickup,
+  onSelectDropoff,
   onSubmitDelivery,
 }) => {
   const [parcelCategory, setParcelCategory] = useState<ParcelCategory>('documents');
@@ -57,6 +59,30 @@ export const DeliveryForm: React.FC<DeliveryFormProps> = ({
   const expressSurcharge = expressDelivery ? 150 : 0;
   const rawTotal = (currentRate.base + Math.round(distanceKm * currentRate.perKm) + weightSurcharge + expressSurcharge) * vehicleMultiplier;
   const totalLkr = Math.round(rawTotal);
+
+  const courierVehicles = [
+    {
+      id: 'moto' as const,
+      name: 'Flash Moto',
+      desc: 'Small items, urgent docs (≤3kg)',
+      icon: '🏍️',
+      badge: 'Fastest',
+    },
+    {
+      id: 'tuk' as const,
+      name: 'Tuk Courier',
+      desc: 'Medium boxes & food catering (≤10kg)',
+      icon: '🛺',
+      badge: 'Popular',
+    },
+    {
+      id: 'van' as const,
+      name: 'Mini Cargo / Van',
+      desc: 'Heavy parcels & multiple boxes (≤50kg)',
+      icon: '🚐',
+      badge: 'High Capacity',
+    },
+  ];
 
   const categories = [
     {
@@ -100,7 +126,8 @@ export const DeliveryForm: React.FC<DeliveryFormProps> = ({
         specialInstructions,
         requireSignatureOtp,
       },
-      totalLkr
+      totalLkr,
+      courierVehicle
     );
   };
 
@@ -112,12 +139,74 @@ export const DeliveryForm: React.FC<DeliveryFormProps> = ({
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-extrabold text-white font-heading">Naspick Flash Courier</h3>
             <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-bold text-[10px] rounded border border-emerald-500/30">
-              ON-DEMAND
+              PLACE-TO-PLACE
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Same-day doorstep delivery across Colombo with live GPS telemetry
+            Send couriers and parcels quickly place to place anywhere in Sri Lanka with live tracking
           </p>
+        </div>
+      </div>
+
+      {/* Place-to-Place Route Summary */}
+      <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2 text-xs">
+        <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+          <span className="flex items-center gap-1.5 uppercase tracking-wider">
+            <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+            Place-to-Place Route
+          </span>
+          <span className="text-emerald-400 font-mono font-semibold">
+            {distanceKm} km direct
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div className="p-2 rounded-lg bg-slate-900 border border-emerald-500/30">
+            <span className="text-[10px] text-emerald-400 font-bold block uppercase">Pickup Place:</span>
+            <p className="text-white font-medium truncate">{pickup.name}</p>
+            <span className="text-[10px] text-slate-400">{pickup.city}</span>
+          </div>
+          <div className="p-2 rounded-lg bg-slate-900 border border-rose-500/30">
+            <span className="text-[10px] text-rose-400 font-bold block uppercase">Delivery Place:</span>
+            <p className="text-white font-medium truncate">{dropoff.name}</p>
+            <span className="text-[10px] text-slate-400">{dropoff.city}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Courier Vehicle Mode Chooser */}
+      <div>
+        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+          Select Courier Vehicle
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {courierVehicles.map((v) => {
+            const isSelected = courierVehicle === v.id;
+            return (
+              <button
+                type="button"
+                key={v.id}
+                onClick={() => setCourierVehicle(v.id)}
+                className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  isSelected
+                    ? 'bg-emerald-950/50 border-emerald-500 text-white ring-1 ring-emerald-500/50 shadow-md'
+                    : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-base">{v.icon}</span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                      isSelected ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      {v.badge}
+                    </span>
+                  </div>
+                  <span className="font-bold text-xs block text-white">{v.name}</span>
+                </div>
+                <span className="text-[10px] text-slate-400 line-clamp-2 mt-1">{v.desc}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
