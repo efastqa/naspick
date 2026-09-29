@@ -122,6 +122,7 @@ interface RiderBookingPanelProps {
   pastTripsCount?: number;
   lastTrip?: Ride | null;
   onRebookTrip?: (trip: Ride) => void;
+  onOpenDriverWizard?: () => void;
 }
 
 export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
@@ -154,6 +155,7 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
   pastTripsCount = 0,
   lastTrip,
   onRebookTrip,
+  onOpenDriverWizard,
 }) => {
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
   const activeVehicleOptions = vehicleOptions && vehicleOptions.length > 0 ? vehicleOptions : VEHICLE_OPTIONS;
@@ -774,12 +776,10 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
           onDetectGps={handleDetectGpsLocation}
           isDetectingGps={isDetectingGps}
           customerUser={customerUser}
-          onSelectService={(mode, triggerDestinationSearch) => {
+          onSelectService={(mode) => {
             setServiceMode(mode);
-            setActiveStep('planning');
-            if (triggerDestinationSearch) {
-              setSearchModalMode('dropoff');
-            }
+            // Sequential 2-step booking: choose current location, then destination
+            setSearchModalMode('pickup');
           }}
           onChooseCurrentLocation={() => {
             setSearchModalMode('pickup');
@@ -794,6 +794,7 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
           lastTrip={lastTrip}
           onRebookTrip={onRebookTrip}
           surgeMultiplier={surgeMultiplier}
+          onOpenDriverWizard={onOpenDriverWizard}
         />
       ) : (
         /* ---------------- STEP 2: ROUTE PLANNING & VEHICLE BOOKING ---------------- */
@@ -1881,6 +1882,9 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
           setSearchModalMode(null);
           setEditingStopIndex(null);
         }}
+        pickupPoint={pickup}
+        serviceMode={serviceMode}
+        onBackToPickup={() => setSearchModalMode('pickup')}
         onDetectGps={handleDetectGpsLocation}
         isDetectingGps={isDetectingGps}
         customerUser={customerUser}

@@ -15,6 +15,8 @@ import { SmsNotificationDrawer } from './components/Notifications/SmsNotificatio
 import { PageSettingsModal } from './components/Common/PageSettingsModal';
 import { OfflineIndicator } from './components/Common/OfflineIndicator';
 import { CustomerAuthModal } from './components/Customer/CustomerAuthModal';
+import { AppSeparationAdviceModal } from './components/Common/AppSeparationAdviceModal';
+import { DriverRegistrationWizardModal } from './components/Driver/DriverRegistrationWizardModal';
 import { SRI_LANKA_LOCATIONS, VEHICLE_OPTIONS } from './data/mockLocations';
 import { INITIAL_DRIVERS, INITIAL_PAYOUTS, INITIAL_DRIVER_APPLICATIONS } from './data/mockDrivers';
 import { INITIAL_TRIP_HISTORY } from './data/mockTripHistory';
@@ -61,7 +63,21 @@ const createUniqueEventId = (prefix: string) => {
 };
 
 export default function App() {
-  const [currentRole, setCurrentRole] = useState<'rider' | 'driver' | 'admin'>('rider');
+  const [currentRole, setCurrentRole] = useState<'rider' | 'driver' | 'admin'>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const roleParam = params.get('role') || params.get('mode');
+        if (roleParam === 'driver' || roleParam === 'captain') return 'driver';
+        if (roleParam === 'admin') return 'admin';
+        if (roleParam === 'rider' || roleParam === 'passenger') return 'rider';
+        const saved = localStorage.getItem('naspick_preferred_role');
+        if (saved === 'driver' || saved === 'admin') return saved;
+      }
+    } catch {}
+    return 'rider';
+  });
+  const [showAdviceModal, setShowAdviceModal] = useState<boolean>(false);
   const [language, setLanguage] = useState<Language>('en');
   const [pickup, setPickup] = useState<LocationPoint>(SRI_LANKA_LOCATIONS[0]); // Galle Face Green
   const [dropoff, setDropoff] = useState<LocationPoint>(SRI_LANKA_LOCATIONS[1]); // Fort Railway Station
@@ -70,6 +86,7 @@ export default function App() {
   const [drivers, setDrivers] = useState<Driver[]>(INITIAL_DRIVERS);
   const [selectedDriverId, setSelectedDriverId] = useState<string>(INITIAL_DRIVERS[0]?.id || 'drv_1');
   const [isAddDriverModalOpen, setIsAddDriverModalOpen] = useState<boolean>(false);
+  const [isDriverWizardOpen, setIsDriverWizardOpen] = useState<boolean>(false);
   const [payouts, setPayouts] = useState<DriverPayout[]>(INITIAL_PAYOUTS);
   const [applications, setApplications] = useState<DriverApplication[]>(INITIAL_DRIVER_APPLICATIONS);
   const [surgeMultiplier, setSurgeMultiplier] = useState<number>(1.0);
@@ -299,6 +316,9 @@ export default function App() {
       }
     }
     setCurrentRole(role);
+    try {
+      localStorage.setItem('naspick_preferred_role', role);
+    } catch {}
   };
 
   const handleAdminAuthenticated = () => {
@@ -798,6 +818,10 @@ export default function App() {
       if (data.driver) {
         setDrivers((prev) => [data.driver, ...prev]);
         setSelectedDriverId(data.driver.id);
+        setCurrentRole('driver');
+        try {
+          localStorage.setItem('naspick_preferred_role', 'driver');
+        } catch {}
         triggerPush('Driver Onboarded', `${data.driver.name} joined the Naspick fleet.`);
         addSms(
           data.driver.phone,
@@ -836,9 +860,14 @@ export default function App() {
       };
       setDrivers((prev) => [fullDriver, ...prev]);
       setSelectedDriverId(fallbackId);
+      setCurrentRole('driver');
+      try {
+        localStorage.setItem('naspick_preferred_role', 'driver');
+      } catch {}
       triggerPush('Driver Onboarded', `${fullDriver.name} added to Naspick fleet.`);
     }
     setIsAddDriverModalOpen(false);
+    setIsDriverWizardOpen(false);
   };
 
   // Reset Driver Fleet to 10 Sri Lankan Drivers
@@ -934,6 +963,7 @@ export default function App() {
             pastTripsCount={pastTrips.length}
             lastTrip={pastTrips[0] || null}
             onRebookTrip={handleRebookTrip}
+            onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
           />
         );
       case 'driver':
@@ -950,7 +980,7 @@ export default function App() {
             payouts={payouts}
             allDrivers={drivers}
             onSelectDriver={setSelectedDriverId}
-            onOpenAddDriver={() => setIsAddDriverModalOpen(true)}
+            onOpenAddDriver={() => setIsDriverWizardOpen(true)}
             onResetDrivers={handleResetDrivers}
           />
         );
@@ -1035,6 +1065,8 @@ export default function App() {
         onOpenCustomerAuth={() => setIsCustomerAuthModalOpen(true)}
         onOpenTripHistory={() => setShowTripHistoryModal(true)}
         pastTripsCount={pastTrips.length}
+        onOpenAdviceModal={() => setShowAdviceModal(true)}
+        onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
       />
 
       {/* Main App Canvas */}
@@ -1423,6 +1455,22 @@ export default function App() {
         onClose={() => setShowShareTripModal(false)}
         ride={activeRide}
         onSendSmsToContact={(phone, text) => addSms(phone, text, 'safety_alert')}
+      />
+
+      {/* Driver vs Passenger Separation & 4-Services Operating Advice Modal */}
+      <AppSeparationAdviceModal
+        isOpen={showAdviceModal}
+        onClose={() => setShowAdviceModal(false)}
+        currentRole={currentRole}
+        onSwitchRole={(r) => handleSelectRole(r)}
+        onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
+      />
+
+      {/* Driver Partner Self-Service Registration Wizard */}
+      <DriverRegistrationWizardModal
+        isOpen={isDriverWizardOpen}
+        onClose={() => setIsDriverWizardOpen(false)}
+        onRegisterDriver={handleAddDriver}
       />
     </div>
   );

@@ -38,6 +38,7 @@ interface RiderHomeServicesViewProps {
   lastTrip?: Ride | null;
   onRebookTrip?: (trip: Ride) => void;
   surgeMultiplier: number;
+  onOpenDriverWizard?: () => void;
 }
 
 export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
@@ -53,6 +54,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
   lastTrip,
   onRebookTrip,
   surgeMultiplier,
+  onOpenDriverWizard,
 }) => {
   // 5 Top Popular Sri Lanka Quick Destinations
   const quickDestinations = [
@@ -177,7 +179,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
           <button
             type="button"
             id="home-service-rides"
-            onClick={() => onSelectService('ride', true)}
+            onClick={() => onSelectService('ride')}
             className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 hover:border-emerald-500/60 transition-all text-left group shadow-lg flex flex-col justify-between relative overflow-hidden"
           >
             <div className="flex items-start justify-between">
@@ -197,7 +199,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 mt-2">
-              <span>Book Ride</span>
+              <span>Book Ride · 2 Steps</span>
               <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
@@ -206,7 +208,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
           <button
             type="button"
             id="home-service-delivery"
-            onClick={() => onSelectService('delivery', false)}
+            onClick={() => onSelectService('delivery')}
             className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 hover:border-emerald-500/60 transition-all text-left group shadow-lg flex flex-col justify-between relative overflow-hidden"
           >
             <div className="flex items-start justify-between">
@@ -226,7 +228,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-bold text-sky-400 mt-2">
-              <span>Send Package</span>
+              <span>Send Package · 2 Steps</span>
               <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
@@ -235,7 +237,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
           <button
             type="button"
             id="home-service-tours"
-            onClick={() => onSelectService('tour', false)}
+            onClick={() => onSelectService('tour')}
             className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 hover:border-emerald-500/60 transition-all text-left group shadow-lg flex flex-col justify-between relative overflow-hidden"
           >
             <div className="flex items-start justify-between">
@@ -255,7 +257,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 mt-2">
-              <span>Explore Packages</span>
+              <span>Explore Packages · 2 Steps</span>
               <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
@@ -264,7 +266,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
           <button
             type="button"
             id="home-service-rentals"
-            onClick={() => onSelectService('rental', false)}
+            onClick={() => onSelectService('rental')}
             className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 hover:border-emerald-500/60 transition-all text-left group shadow-lg flex flex-col justify-between relative overflow-hidden"
           >
             <div className="flex items-start justify-between">
@@ -284,7 +286,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-bold text-purple-400 mt-2">
-              <span>View Rates</span>
+              <span>View Rates · 2 Steps</span>
               <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
             </div>
           </button>
@@ -299,7 +301,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
         <button
           type="button"
           id="home-where-to-search-btn"
-          onClick={() => onSelectService('ride', true)}
+          onClick={() => onSelectService('ride')}
           className="w-full p-4 bg-slate-900/90 hover:bg-slate-900 border border-slate-700/90 hover:border-emerald-500/70 rounded-2xl text-left transition-all shadow-xl flex items-center justify-between group"
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -316,7 +318,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
             </div>
           </div>
           <div className="px-3 py-1.5 rounded-xl bg-slate-800 group-hover:bg-emerald-500 text-slate-300 group-hover:text-slate-950 text-xs font-bold transition-all flex items-center gap-1">
-            <span>Go</span>
+            <span>Choose Location</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </button>
@@ -374,6 +376,33 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
             className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-sm transition-all flex-shrink-0"
           >
             Rebook
+          </button>
+        </div>
+      )}
+
+      {/* 7. Earn with Naspick Driver Partner Card */}
+      {onOpenDriverWizard && (
+        <div className="p-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+              <Car className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase text-emerald-400 tracking-wider">Drive & Earn</span>
+                <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 text-[9px] font-bold rounded">5% Flat Fee</span>
+              </div>
+              <p className="text-xs font-bold text-white truncate">Register Your Tuk, Car or Van</p>
+              <p className="text-[10px] text-slate-400 truncate">Earn up to LKR 180,000/mo + daily LankaClear CEFT cashouts</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            id="home-register-driver-btn"
+            onClick={onOpenDriverWizard}
+            className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex-shrink-0 active:scale-95"
+          >
+            Sign Up
           </button>
         </div>
       )}

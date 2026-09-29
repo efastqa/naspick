@@ -12,7 +12,9 @@ import {
   Lock,
   Navigation,
   Sparkles,
-  History
+  History,
+  HelpCircle,
+  UserPlus
 } from 'lucide-react';
 import { NaspickLogo } from '../Common/NaspickLogo';
 import { LanguageSwitcher } from '../Common/LanguageSwitcher';
@@ -34,6 +36,8 @@ interface NavbarProps {
   onOpenCustomerAuth?: () => void;
   onOpenTripHistory?: () => void;
   pastTripsCount?: number;
+  onOpenAdviceModal?: () => void;
+  onOpenDriverWizard?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -51,6 +55,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCustomerAuth,
   onOpenTripHistory,
   pastTripsCount = 0,
+  onOpenAdviceModal,
+  onOpenDriverWizard,
 }) => {
   return (
     <header className="w-full bg-slate-950/90 border-b border-slate-800 backdrop-blur-md sticky top-0 z-40 px-3 sm:px-4 py-2.5">
@@ -116,6 +122,35 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* App Separation & 4-Service Operation Advice Helper */}
+          {onOpenAdviceModal && (
+            <button
+              id="role-advice-btn"
+              type="button"
+              onClick={onOpenAdviceModal}
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1 ml-0.5 sm:ml-1 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 rounded-lg text-xs font-bold transition-all min-h-[36px]"
+              title="Driver & Passenger Separation & Multi-Service Advice"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+          )}
+
+          {/* Driver Partner Self-Service Registration Wizard */}
+          {onOpenDriverWizard && (
+            <button
+              id="nav-join-driver-btn"
+              type="button"
+              onClick={onOpenDriverWizard}
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 ml-0.5 sm:ml-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition-all min-h-[36px]"
+              title="Drive with Naspick - Register Driver Partner"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Drive with Us</span>
+              <span className="md:hidden">Drive</span>
+            </button>
+          )}
         </div>
 
         {/* Device Viewport Selector (Web | Tab | Mobile) */}
