@@ -51,6 +51,7 @@ interface AdminControlProps {
   onResetVehiclePricing?: () => void;
   expresswayTollLkr?: number;
   onUpdateExpresswayToll?: (toll: number) => void;
+  onClearDrivers?: () => void;
 }
 
 export const AdminControl: React.FC<AdminControlProps> = ({
@@ -61,6 +62,7 @@ export const AdminControl: React.FC<AdminControlProps> = ({
   onUpdateSurge,
   onOpenAddDriver,
   onResetDrivers,
+  onClearDrivers,
   onToggleDriverStatus,
   onLockAdmin,
   adminPassword = 'naspick2026',
@@ -858,10 +860,23 @@ export const AdminControl: React.FC<AdminControlProps> = ({
                   <button
                     id="admin-reset-fleet-btn"
                     onClick={onResetDrivers}
-                    title="Reset Driver Fleet to 10 Authentic Sri Lankan Drivers"
-                    className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-800 rounded-xl text-xs transition-colors"
+                    title="Load 10 Sample Sri Lankan Drivers"
+                    className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-800 rounded-xl text-xs transition-colors flex items-center gap-1 px-2"
                   >
-                    <RotateCcw className="w-4 h-4" />
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline text-[11px]">Load Sample Fleet</span>
+                  </button>
+                )}
+
+                {onClearDrivers && (
+                  <button
+                    id="admin-clear-fleet-btn"
+                    onClick={onClearDrivers}
+                    title="Clear All Drivers (Start Fresh with 0 Drivers for Live Testing)"
+                    className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-xl text-xs transition-colors flex items-center gap-1 px-2"
+                  >
+                    <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="hidden sm:inline text-[11px]">Clear Fleet</span>
                   </button>
                 )}
               </div>

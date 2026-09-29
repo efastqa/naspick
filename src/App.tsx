@@ -83,8 +83,26 @@ export default function App() {
   const [dropoff, setDropoff] = useState<LocationPoint>(SRI_LANKA_LOCATIONS[1]); // Fort Railway Station
   const [intermediateStops, setIntermediateStops] = useState<LocationPoint[]>([]);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
-  const [drivers, setDrivers] = useState<Driver[]>(INITIAL_DRIVERS);
-  const [selectedDriverId, setSelectedDriverId] = useState<string>(INITIAL_DRIVERS[0]?.id || 'drv_1');
+  const [drivers, setDrivers] = useState<Driver[]>(() => {
+    try {
+      const saved = localStorage.getItem('naspick_registered_drivers');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return []; // Clean empty fleet: default drivers removed so user can add fresh real drivers
+  });
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('naspick_registered_drivers');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed[0]?.id) return parsed[0].id;
+      }
+    } catch {}
+    return '';
+  });
   const [isAddDriverModalOpen, setIsAddDriverModalOpen] = useState<boolean>(false);
   const [isDriverWizardOpen, setIsDriverWizardOpen] = useState<boolean>(false);
   const [payouts, setPayouts] = useState<DriverPayout[]>(INITIAL_PAYOUTS);
@@ -357,12 +375,42 @@ export default function App() {
     },
   ]);
 
+  // Persist drivers locally whenever changed
+  useEffect(() => {
+    try {
+      localStorage.setItem('naspick_registered_drivers', JSON.stringify(drivers));
+    } catch {}
+    if (!selectedDriverId && drivers.length > 0) {
+      setSelectedDriverId(drivers[0].id);
+    }
+  }, [drivers, selectedDriverId]);
+
   // Sync with backend API
   useEffect(() => {
     fetch('/api/drivers')
       .then((res) => res.json())
       .then((data) => {
-        if (data.drivers) setDrivers(data.drivers);
+        if (data.drivers && Array.isArray(data.drivers)) {
+          if (data.drivers.length > 0) {
+            setDrivers(data.drivers);
+          } else {
+            // Check if local storage has registered drivers and sync up
+            const saved = localStorage.getItem('naspick_registered_drivers');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setDrivers(parsed);
+                parsed.forEach((d) => {
+                  fetch('/api/drivers/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(d),
+                  }).catch(() => {});
+                });
+              }
+            }
+          }
+        }
         if (data.surgeMultiplier) setSurgeMultiplier(data.surgeMultiplier);
       })
       .catch(() => {
@@ -541,10 +589,28 @@ export default function App() {
           `Naspick Safety Alert: Sahan Dissanayake booked a ride to ${dropoff.name}. Driver: ${enrichedRide.driver?.name} (${enrichedRide.driver?.vehiclePlate}). Live Tracking: https://naspick.lk/track/${enrichedRide.id}. Emergency helpline: 119.`,
           'safety_alert'
         );
+      } else if (res.status === 400) {
+        triggerPush('No Drivers Online', 'No registered driver is online right now. Register a vehicle via "Drive with Us" to go online!');
+        addSms(
+          rideData.riderPhone,
+          `Naspick Dispatch: No driver partners are registered or online. Register your vehicle via "Drive with Us" in the header to accept trips!`,
+          'safety_alert'
+        );
       }
     } catch (e) {
       // Local fallback
-      const mockDriver = drivers[0];
+      const availableDriver = drivers.find((d) => d.isOnline && !d.isBusy && d.vehicleCategory === rideData.vehicleCategory) || drivers.find((d) => d.isOnline && !d.isBusy) || drivers[0] || null;
+
+      if (!availableDriver) {
+        triggerPush('No Drivers Online', 'No registered driver partner is online right now. Register a vehicle via "Drive with Us" to go online!');
+        addSms(
+          rideData.riderPhone,
+          `Naspick Dispatch: No driver partners are currently online. Please register a vehicle using "+ Register Driver" in the navigation!`,
+          'safety_alert'
+        );
+        return;
+      }
+
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
       const localRide: Ride = {
         id: `NPK-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -555,7 +621,7 @@ export default function App() {
         dropoff,
         intermediateStops: rideData.intermediateStops || intermediateStops,
         vehicleCategory: rideData.vehicleCategory,
-        driver: mockDriver,
+        driver: availableDriver,
         status: 'accepted',
         fare: rideData.fare,
         paymentMethod: rideData.paymentMethod,
@@ -579,17 +645,17 @@ export default function App() {
           : rideData.serviceMode === 'tour'
           ? 'Tourist Tour Booked'
           : 'Ride Confirmed',
-        `Driver ${mockDriver.name} is on the way.`
+        `Driver ${availableDriver.name} is on the way.`
       );
       addSms(
         rideData.riderPhone,
-        `Naspick: Driver ${mockDriver.name} (${mockDriver.vehiclePlate}) accepted your request. Share OTP ${otp} to begin.`,
+        `Naspick: Driver ${availableDriver.name} (${availableDriver.vehiclePlate}) accepted your request. Share OTP ${otp} to begin.`,
         'driver_assigned'
       );
       // Automated Safety SMS to User's Primary Emergency Contact (0775260765)
       addSms(
         PRIMARY_SAFETY_CONTACT,
-        `Naspick Safety Alert: Sahan Dissanayake booked a trip to ${dropoff.name}. Driver: ${mockDriver.name} (${mockDriver.vehiclePlate}). Live Tracking: https://naspick.lk/track/${localRide.id}. Emergency helpline: 119.`,
+        `Naspick Safety Alert: Sahan Dissanayake booked a trip to ${dropoff.name}. Driver: ${availableDriver.name} (${availableDriver.vehiclePlate}). Live Tracking: https://naspick.lk/track/${localRide.id}. Emergency helpline: 119.`,
         'safety_alert'
       );
     }
@@ -891,6 +957,24 @@ export default function App() {
     }
   };
 
+  // Clear all drivers to start completely fresh for live onboarding
+  const handleClearDrivers = async () => {
+    try {
+      await fetch('/api/drivers/clear', { method: 'POST' });
+    } catch {}
+    setDrivers([]);
+    setSelectedDriverId('');
+    try {
+      localStorage.removeItem('naspick_registered_drivers');
+    } catch {}
+    triggerPush('Fleet Cleared', 'All drivers removed. The platform is ready for live driver registration.');
+    addSms(
+      PRIMARY_SAFETY_CONTACT,
+      'Naspick Fleet System: Default fleet cleared. App is now clean and ready for real driver registrations.',
+      'safety_alert'
+    );
+  };
+
   // Admin Verify Driver Application
   const handleVerifyDriver = async (applicationId: string, action: 'approve' | 'reject') => {
     try {
@@ -928,8 +1012,8 @@ export default function App() {
     } catch (e) {}
   };
 
-  // Active driver resolution
-  const activeDriver = drivers.find((d) => d.id === selectedDriverId) || drivers[0] || INITIAL_DRIVERS[0];
+  // Active driver resolution (null if no drivers registered yet)
+  const activeDriver = drivers.find((d) => d.id === selectedDriverId) || drivers[0] || null;
 
   // Render the core active role panel
   const renderRolePanel = () => {
@@ -982,6 +1066,7 @@ export default function App() {
             onSelectDriver={setSelectedDriverId}
             onOpenAddDriver={() => setIsDriverWizardOpen(true)}
             onResetDrivers={handleResetDrivers}
+            onClearDrivers={handleClearDrivers}
           />
         );
       case 'admin':
@@ -1028,6 +1113,7 @@ export default function App() {
             onUpdateSurge={handleUpdateSurge}
             onOpenAddDriver={() => setIsAddDriverModalOpen(true)}
             onResetDrivers={handleResetDrivers}
+            onClearDrivers={handleClearDrivers}
             onToggleDriverStatus={handleToggleDriverStatus}
             onLockAdmin={handleLockAdmin}
             adminPassword={adminPassword}

@@ -26,7 +26,7 @@ import {
 import { Driver, Ride, DriverPayout } from '../../types';
 
 interface DriverDashboardProps {
-  driver: Driver;
+  driver: Driver | null;
   activeRide: Ride | null;
   onToggleOnline: (isOnline: boolean) => void;
   onAcceptRide: () => void;
@@ -39,6 +39,7 @@ interface DriverDashboardProps {
   onSelectDriver?: (driverId: string) => void;
   onOpenAddDriver?: () => void;
   onResetDrivers?: () => void;
+  onClearDrivers?: () => void;
 }
 
 export const DriverDashboard: React.FC<DriverDashboardProps> = ({
@@ -55,15 +56,23 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
   onSelectDriver,
   onOpenAddDriver,
   onResetDrivers,
+  onClearDrivers,
 }) => {
   const [activeTab, setActiveTab] = useState<'cockpit' | 'earnings' | 'trips' | 'vehicle'>('cockpit');
   const [enteredOtp, setEnteredOtp] = useState('');
   const [otpError, setOtpError] = useState('');
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [selectedBank, setSelectedBank] = useState(driver.bankDetails.bankName || 'Commercial Bank of Ceylon');
-  const [accountNumber, setAccountNumber] = useState(driver.bankDetails.accountNumber || '8004921045');
+  const [selectedBank, setSelectedBank] = useState(driver?.bankDetails?.bankName || 'Commercial Bank of Ceylon');
+  const [accountNumber, setAccountNumber] = useState(driver?.bankDetails?.accountNumber || '8004921045');
   const [payoutSuccess, setPayoutSuccess] = useState('');
+
+  useEffect(() => {
+    if (driver?.bankDetails) {
+      setSelectedBank(driver.bankDetails.bankName || 'Commercial Bank of Ceylon');
+      setAccountNumber(driver.bankDetails.accountNumber || '8004921045');
+    }
+  }, [driver?.id]);
 
   // 15-second countdown for incoming ride requests
   const [requestCountdown, setRequestCountdown] = useState(15);
@@ -84,6 +93,52 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
     }
     return () => clearInterval(timer);
   }, [activeRide?.status]);
+
+  if (!driver) {
+    return (
+      <div id="driver-partner-dashboard-empty" className="flex flex-col items-center justify-center h-full min-h-[440px] p-6 sm:p-8 bg-slate-900 border border-slate-800 rounded-2xl text-center space-y-4 shadow-xl">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto shadow-lg">
+          <Car className="w-8 h-8 sm:w-10 sm:h-10" />
+        </div>
+        <div className="max-w-md space-y-1">
+          <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 font-extrabold text-[10px] rounded-full uppercase tracking-wider">
+            Naspick Captain Fleet
+          </span>
+          <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
+            No Driver Partner Registered Yet
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+            All default sample drivers have been cleared. Ready to go live? Register your vehicle (Tuk-Tuk, Nano Cab, Sedan, Van, or Motorbike) to start receiving real-time passenger requests.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2 w-full max-w-sm">
+          {onOpenAddDriver && (
+            <button
+              type="button"
+              id="empty-dashboard-register-driver-btn"
+              onClick={onOpenAddDriver}
+              className="w-full py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-xl transition-all flex items-center justify-center gap-2"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Register Driver Partner</span>
+            </button>
+          )}
+
+          {onResetDrivers && (
+            <button
+              type="button"
+              id="empty-dashboard-load-demo-btn"
+              onClick={onResetDrivers}
+              className="w-full sm:w-auto py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition-colors whitespace-nowrap"
+            >
+              Load Demo Fleet
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const handleVerifyStart = (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,10 +216,21 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
               <button
                 id="driver-reset-fleet-btn"
                 onClick={onResetDrivers}
-                title="Reset Driver Fleet to 10 Authentic Sri Lankan Drivers"
+                title="Load 10 Sample Sri Lankan Drivers"
                 className="p-1 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-800 rounded-lg transition-colors text-[11px]"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {onClearDrivers && (
+              <button
+                id="driver-clear-fleet-btn"
+                onClick={onClearDrivers}
+                title="Clear All Drivers (Start Fresh with 0 Drivers)"
+                className="p-1 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-lg transition-colors text-[11px]"
+              >
+                <XCircle className="w-3.5 h-3.5" />
               </button>
             )}
           </div>

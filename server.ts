@@ -281,7 +281,8 @@ const DEFAULT_DRIVERS = [
   },
 ];
 
-let drivers = JSON.parse(JSON.stringify(DEFAULT_DRIVERS));
+// Clean fleet: start empty so real drivers can register live
+let drivers: any[] = [];
 
 let activeRide: any = null;
 let ridesHistory: any[] = [];
@@ -467,6 +468,12 @@ app.post('/api/drivers/reset', (req, res) => {
   res.json({ success: true, message: 'Driver fleet successfully reset to default 10 authentic Sri Lankan drivers.', drivers });
 });
 
+// Clear all drivers to start completely fresh
+app.post('/api/drivers/clear', (req, res) => {
+  drivers = [];
+  res.json({ success: true, message: 'All drivers cleared. Fleet is now fresh and ready for live driver registration.', drivers: [] });
+});
+
 // Get active ride
 app.get('/api/rides/active', (req, res) => {
   res.json({ success: true, activeRide });
@@ -499,7 +506,14 @@ app.post('/api/rides/request', (req, res) => {
   // Find an available driver of matching category or fallback
   const matchingDriver = drivers.find(
     (d) => d.isOnline && !d.isBusy && d.vehicleCategory === vehicleCategory
-  ) || drivers.find((d) => d.isOnline && !d.isBusy) || drivers[0];
+  ) || drivers.find((d) => d.isOnline && !d.isBusy) || drivers[0] || null;
+
+  if (!matchingDriver) {
+    return res.status(400).json({ 
+      error: 'No driver partner is currently registered or online. Register your vehicle via "Drive with Us" to go online!',
+      noDriver: true
+    });
+  }
 
   const rideId = `NPK-${Math.floor(100000 + Math.random() * 900000)}`;
 

@@ -74,22 +74,22 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSuccessComplete, setIsSuccessComplete] = useState<boolean>(false);
 
-  // Step 1: Personal Details
-  const [name, setName] = useState('Nuwan Pradeep Weerasinghe');
-  const [phone, setPhone] = useState('+94 77 982 4410');
-  const [nicNumber, setNicNumber] = useState('199320401928');
+  // Step 1: Personal Details (Blank for real driver live onboarding)
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('+94 7');
+  const [nicNumber, setNicNumber] = useState('');
   const [cityHub, setCityHub] = useState('Colombo Central / Fort');
-  const [emergencyContact, setEmergencyContact] = useState('+94 77 526 0765');
-  const [avatarUrl, setAvatarUrl] = useState('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150');
+  const [emergencyContact, setEmergencyContact] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150');
   const [phoneOtpVerified, setPhoneOtpVerified] = useState(true);
 
   // Step 2: Vehicle Information
   const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory>('tuk');
-  const [vehicleModel, setVehicleModel] = useState('Bajaj RE 4S Chrome Edition 205cc');
+  const [vehicleModel, setVehicleModel] = useState('');
   const [province, setProvince] = useState('WP');
-  const [plateNumber, setPlateNumber] = useState('ABY-7734');
+  const [plateNumber, setPlateNumber] = useState('');
   const [vehicleYear, setVehicleYear] = useState('2022');
-  const [vehicleColor, setVehicleColor] = useState('Emerald Green & Black');
+  const [vehicleColor, setVehicleColor] = useState('');
   const [hasAc, setHasAc] = useState(false);
   const [eligibleServices, setEligibleServices] = useState<string[]>(['ride', 'delivery']);
 
@@ -104,9 +104,9 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
 
   // Step 4: Banking & Payouts
   const [bankName, setBankName] = useState('Commercial Bank of Ceylon');
-  const [accountNumber, setAccountNumber] = useState('8019482014');
-  const [branch, setBranch] = useState('Colombo Fort Branch');
-  const [accountHolder, setAccountHolder] = useState('Nuwan Pradeep Weerasinghe');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [branch, setBranch] = useState('');
+  const [accountHolder, setAccountHolder] = useState('');
   const [payoutSchedule, setPayoutSchedule] = useState<'instant' | 'weekly'>('instant');
 
   if (!isOpen) return null;
@@ -195,18 +195,34 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
   };
 
   const handleFinalSubmit = () => {
+    if (!name.trim()) {
+      alert('Please enter your full legal name in Step 1');
+      setCurrentStep(1);
+      return;
+    }
+    if (!plateNumber.trim()) {
+      alert('Please enter your vehicle license plate number in Step 2');
+      setCurrentStep(2);
+      return;
+    }
+
     const fullPlate = `${province} ${plateNumber.trim().toUpperCase()}`;
     const hubCoords = CITY_HUBS[cityHub] || { lat: 6.9344, lng: 79.8428 };
+    const defaultModel = 
+      vehicleCategory === 'tuk' ? 'Bajaj RE 4S' :
+      vehicleCategory === 'nano' ? 'Suzuki Wagon R' :
+      vehicleCategory === 'van' ? 'Toyota HiAce KDH' :
+      vehicleCategory === 'moto' ? 'Yamaha FZ 150cc' : 'Toyota Prius';
 
     const newDriver: Partial<Driver> = {
       id: `drv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: name.trim(),
-      phone: phone.trim(),
-      avatar: avatarUrl,
+      phone: phone.trim() || '+94 77 123 4567',
+      avatar: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       vehicleCategory,
-      vehicleModel: `${vehicleModel} ${hasAc ? '(AC)' : ''}`.trim(),
+      vehicleModel: `${vehicleModel.trim() || defaultModel} ${hasAc ? '(AC)' : ''}`.trim(),
       vehiclePlate: fullPlate,
-      vehicleColor,
+      vehicleColor: vehicleColor.trim() || (vehicleCategory === 'tuk' ? 'Emerald Green' : 'White'),
       rating: 5.0,
       totalTrips: 0,
       isOnline: true,
@@ -216,13 +232,13 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
       heading: Math.floor(Math.random() * 360),
       earningsTodayLkr: 0,
       walletBalanceLkr: 5000, // LKR 5,000 Welcome fuel credit bonus!
-      nicNumber: nicNumber || '199320401928',
+      nicNumber: nicNumber.trim() || '199000000000',
       verificationStatus: 'approved',
       bankDetails: {
         bankName,
-        accountNumber: accountNumber || '8019482014',
-        branch,
-        accountHolder: accountHolder || name,
+        accountNumber: accountNumber.trim() || '8001234567',
+        branch: branch.trim() || 'Main Branch',
+        accountHolder: accountHolder.trim() || name.trim(),
       },
     };
 
