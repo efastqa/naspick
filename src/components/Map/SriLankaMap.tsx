@@ -947,7 +947,11 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900/95 border border-slate-800 rounded-lg text-[10px] sm:text-[11px] text-slate-300 backdrop-blur-md pointer-events-auto shadow-lg max-w-[85%] truncate">
           <LocateFixed className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="truncate">
-            Tracking <strong className="text-white">{drivers.filter((d) => d.isOnline).length} Active Drivers</strong> across Colombo, Kandy, Kurunegala & Negombo
+            {drivers.filter((d) => d.isOnline).length > 0 ? (
+              <>Tracking <strong className="text-white">{drivers.filter((d) => d.isOnline).length} Active Drivers</strong> across Colombo, Kandy, Kurunegala & Negombo</>
+            ) : (
+              <>Fleet Radar Online • <strong className="text-emerald-400">Ready for Live Drivers</strong> (Register via "Drive with Us" to go online)</>
+            )}
           </span>
         </div>
 
