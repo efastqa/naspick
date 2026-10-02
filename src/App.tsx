@@ -17,6 +17,9 @@ import { OfflineIndicator } from './components/Common/OfflineIndicator';
 import { CustomerAuthModal } from './components/Customer/CustomerAuthModal';
 import { AppSeparationAdviceModal } from './components/Common/AppSeparationAdviceModal';
 import { DriverRegistrationWizardModal } from './components/Driver/DriverRegistrationWizardModal';
+import { CMBFlightTrackerModal } from './components/Tourist/CMBFlightTrackerModal';
+import { testFirebaseConnection } from './firebase';
+import { subscribeToDrivers, saveDriverToCloud, saveRideToCloud } from './services/firebaseService';
 import { SRI_LANKA_LOCATIONS, VEHICLE_OPTIONS } from './data/mockLocations';
 import { INITIAL_DRIVERS, INITIAL_PAYOUTS, INITIAL_DRIVER_APPLICATIONS } from './data/mockDrivers';
 import { INITIAL_TRIP_HISTORY } from './data/mockTripHistory';
@@ -36,6 +39,8 @@ import {
   AppSettings, 
   CustomerUser,
   CityHubId,
+  CurrencyMode,
+  CMBFlight,
   PRIMARY_SAFETY_CONTACT, 
   PRIMARY_SAFETY_CONTACT_INTL 
 } from './types';
@@ -119,6 +124,7 @@ export default function App() {
   });
   const [showSmsDrawer, setShowSmsDrawer] = useState<boolean>(false);
   const [showRatingModal, setShowRatingModal] = useState<boolean>(false);
+  const [showFlightTrackerModal, setShowFlightTrackerModal] = useState<boolean>(false);
   const [completedRideForRating, setCompletedRideForRating] = useState<Ride | null>(null);
 
   // Focus City Hub Selection (Galle, Colombo, Kandy, Kurunegala, Negombo)
@@ -163,6 +169,29 @@ export default function App() {
         setDropoff(d);
       }
     }
+  };
+
+  const handleSelectFlightForPickup = (flight: CMBFlight) => {
+    const airportPickup = SRI_LANKA_LOCATIONS.find((l) => l.id === 'loc_airport_cmb') || {
+      id: 'loc_airport_cmb',
+      name: 'Bandaranaike International Airport (CMB)',
+      address: `Katunayake Airport (${flight.terminal} - Arrivals Gate)`,
+      city: 'Negombo / Katunayake',
+      lat: 7.1808,
+      lng: 79.8841,
+    };
+    
+    const dropoffLoc = SRI_LANKA_LOCATIONS.find((l) => 
+      l.city.toLowerCase() === (flight.defaultDropoffCity?.toLowerCase() || 'colombo')
+    ) || SRI_LANKA_LOCATIONS[0];
+
+    setPickup(airportPickup);
+    setDropoff(dropoffLoc);
+    setCurrentRole('rider');
+    setMobileTab('panel');
+    setShowFlightTrackerModal(false);
+    triggerPush('Airport Chauffeur Configured', `Pickup set for ${flight.airline} ${flight.flightNumber} from ${flight.originCity}.`);
+    addSms('+94 77 123 4567', `Flight ${flight.flightNumber} (${flight.originCity} to CMB) arrival transfer locked. Driver assigned at Terminal 1.`, 'driver_assigned');
   };
 
   // Admin Control Panel Password Protection
@@ -385,8 +414,19 @@ export default function App() {
     }
   }, [drivers, selectedDriverId]);
 
-  // Sync with backend API
+  // Sync with backend API & Firebase Firestore
   useEffect(() => {
+    // 1. Validate Firebase connection and subscribe to Cloud Driver records
+    testFirebaseConnection();
+    const unsubFirestoreDrivers = subscribeToDrivers((cloudDrivers) => {
+      if (cloudDrivers && cloudDrivers.length > 0) {
+        setDrivers(cloudDrivers);
+        try {
+          localStorage.setItem('naspick_registered_drivers', JSON.stringify(cloudDrivers));
+        } catch {}
+      }
+    });
+
     fetch('/api/drivers')
       .then((res) => res.json())
       .then((data) => {
@@ -443,6 +483,10 @@ export default function App() {
         }
       })
       .catch(() => {});
+
+    return () => {
+      unsubFirestoreDrivers();
+    };
   }, []);
 
   // Dispatch local push alert
@@ -570,6 +614,7 @@ export default function App() {
           rentalPackageId: rideData.rentalPackageId,
         };
         setActiveRide(enrichedRide);
+        saveRideToCloud(enrichedRide);
         triggerPush(
           rideData.serviceMode === 'delivery'
             ? 'Flash Courier Booked'
@@ -885,6 +930,7 @@ export default function App() {
         setDrivers((prev) => [data.driver, ...prev]);
         setSelectedDriverId(data.driver.id);
         setCurrentRole('driver');
+        saveDriverToCloud(data.driver);
         try {
           localStorage.setItem('naspick_preferred_role', 'driver');
         } catch {}
@@ -927,6 +973,7 @@ export default function App() {
       setDrivers((prev) => [fullDriver, ...prev]);
       setSelectedDriverId(fallbackId);
       setCurrentRole('driver');
+      saveDriverToCloud(fullDriver);
       try {
         localStorage.setItem('naspick_preferred_role', 'driver');
       } catch {}
@@ -1048,6 +1095,8 @@ export default function App() {
             lastTrip={pastTrips[0] || null}
             onRebookTrip={handleRebookTrip}
             onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
+            currency={settings.currency}
+            onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
           />
         );
       case 'driver':
@@ -1131,7 +1180,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950 w-full overflow-x-hidden">
       {/* Top Navbar */}
       <Navbar
         currentRole={currentRole}
@@ -1153,14 +1202,17 @@ export default function App() {
         pastTripsCount={pastTrips.length}
         onOpenAdviceModal={() => setShowAdviceModal(true)}
         onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
+        currency={settings.currency}
+        onSelectCurrency={(c) => handleUpdateSettings({ currency: c })}
+        onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
       />
 
       {/* Main App Canvas */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-5 flex flex-col pb-24 lg:pb-5">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-5 flex flex-col pb-24 md:pb-5">
         {/* VIEWPORT MODE 1: MOBILE SMARTPHONE SIMULATOR */}
         {settings.deviceViewMode === 'mobile' && (
-          <div className="flex-1 flex items-center justify-center py-2 sm:py-4">
-            <div className="w-full max-w-[420px] h-[calc(100vh-90px)] sm:h-[820px] bg-slate-900 border-0 sm:border-[10px] border-slate-800 rounded-2xl sm:rounded-[50px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] ring-0 sm:ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
+          <div className="flex-1 flex items-center justify-center py-0 sm:py-4">
+            <div className="w-full max-w-[440px] h-[calc(100vh-140px)] sm:h-[820px] bg-slate-900 border-0 sm:border-[10px] border-slate-800 rounded-2xl sm:rounded-[50px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] ring-0 sm:ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
               {/* Smartphone Status Bar & Dynamic Island (Desktop Preview Only) */}
               <div className="hidden sm:flex h-10 bg-slate-950 px-6 items-center justify-between text-[11px] font-bold text-slate-300 select-none z-30">
                 <span>09:41</span>
@@ -1176,10 +1228,45 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Mobile Content Scroll Area */}
+              {/* Mobile View Mode Switcher Header inside Simulator */}
+              <div className="flex items-center justify-between p-2 bg-slate-950 border-b border-slate-800 z-20">
+                <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5 pl-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="truncate">{selectedCityHub === 'all' ? 'Radar' : selectedCityHub.toUpperCase()}</span>
+                </span>
+                <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[10px] font-bold">
+                  <button
+                    onClick={() => setMobileTab('panel')}
+                    className={`px-2.5 py-1 rounded transition-all ${
+                      mobileTab === 'panel' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Panel
+                  </button>
+                  <button
+                    onClick={() => setMobileTab('map')}
+                    className={`px-2.5 py-1 rounded transition-all flex items-center gap-1 ${
+                      mobileTab === 'map' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <MapIcon className="w-3 h-3" />
+                    <span>Map</span>
+                  </button>
+                  <button
+                    onClick={() => setMobileTab('split')}
+                    className={`px-2.5 py-1 rounded transition-all ${
+                      mobileTab === 'split' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Split
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile Content Area */}
               <div className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Embedded Mini Map in Mobile Header with comfortable height */}
-                <div className="h-64 sm:h-72 w-full flex-shrink-0">
+                {/* Embedded Map (Shown in map mode or split mode) */}
+                <div className={`${mobileTab === 'panel' ? 'hidden' : mobileTab === 'map' ? 'flex-1 h-full' : 'h-56 sm:h-64'} w-full flex-shrink-0 transition-all`}>
                   <SriLankaMap
                     pickup={pickup}
                     dropoff={dropoff}
@@ -1192,8 +1279,8 @@ export default function App() {
                   />
                 </div>
 
-                {/* Mobile Screen Body */}
-                <div className="flex-1 overflow-y-auto bg-slate-900">
+                {/* Mobile Screen Body (Shown in panel mode or split mode) */}
+                <div className={`flex-1 overflow-y-auto bg-slate-900 ${mobileTab === 'map' ? 'hidden' : 'flex flex-col'}`}>
                   {renderRolePanel()}
                 </div>
               </div>
@@ -1209,7 +1296,7 @@ export default function App() {
         {/* VIEWPORT MODE 2: TABLET (TAB) SIMULATOR (iPad / Galaxy Tab) */}
         {settings.deviceViewMode === 'tablet' && (
           <div className="flex-1 flex items-center justify-center py-2 sm:py-4">
-            <div className="w-full max-w-[820px] h-full sm:h-[860px] bg-slate-900 border-2 sm:border-[14px] border-slate-800 rounded-2xl sm:rounded-[38px] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)] ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
+            <div className="w-full max-w-[860px] h-full sm:h-[860px] bg-slate-900 border-2 sm:border-[14px] border-slate-800 rounded-2xl sm:rounded-[38px] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)] ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
               {/* Tablet Top Bezel with Front Camera & Ambient Sensor */}
               <div className="h-7 bg-slate-950 px-6 flex items-center justify-between text-[11px] font-bold text-slate-300 select-none z-30 border-b border-slate-800/80">
                 <div className="flex items-center gap-2">
@@ -1231,11 +1318,11 @@ export default function App() {
               </div>
 
               {/* Tablet Screen Body (Balanced 2-Column Responsive Layout) */}
-              <div className="flex-1 overflow-hidden p-3 bg-slate-950/60 flex flex-col">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto md:overflow-hidden p-3 bg-slate-950/60 flex flex-col">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 flex-1 overflow-visible md:overflow-hidden">
                   {/* Tablet Left: Map & Route View */}
-                  <div className="md:col-span-6 flex flex-col h-full overflow-hidden rounded-2xl border border-slate-800">
-                    <div className="flex-1 min-h-[300px]">
+                  <div className="md:col-span-6 flex flex-col h-[320px] md:h-full overflow-hidden rounded-2xl border border-slate-800">
+                    <div className="flex-1 min-h-[280px]">
                       <SriLankaMap
                         pickup={pickup}
                         dropoff={dropoff}
@@ -1250,7 +1337,7 @@ export default function App() {
                   </div>
 
                   {/* Tablet Right: Scrollable Role Panel */}
-                  <div className="md:col-span-6 flex flex-col h-full overflow-y-auto pr-1">
+                  <div className="md:col-span-6 flex flex-col flex-1 overflow-y-auto pr-1">
                     {renderRolePanel()}
                   </div>
                 </div>
@@ -1267,8 +1354,8 @@ export default function App() {
         {/* VIEWPORT MODE 3: FULL WEB DESKTOP FLUID VIEW */}
         {settings.deviceViewMode === 'web' && (
           <div className="flex flex-col flex-1">
-            {/* Mobile View Segmented Switcher (Screens < lg) */}
-            <div className="lg:hidden flex items-center justify-between p-2 sm:p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-md">
+            {/* Mobile View Segmented Switcher (Screens < md) */}
+            <div className="md:hidden flex items-center justify-between p-2 sm:p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-md">
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="truncate">
@@ -1313,11 +1400,11 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-stretch">
-              {/* Left Column: Interactive Map & Live Navigation Engine (7 Cols) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5 flex-1 items-stretch">
+              {/* Left Column: Interactive Map & Live Navigation Engine (7 Cols on md+) */}
               <div 
-                className={`lg:col-span-7 flex flex-col gap-3 ${
-                  mobileTab === 'panel' ? 'hidden lg:flex' : 'flex'
+                className={`md:col-span-7 flex flex-col gap-3 ${
+                  mobileTab === 'panel' ? 'hidden md:flex' : 'flex'
                 } ${mobileTab === 'map' ? 'min-h-[480px] h-[calc(100vh-230px)]' : 'min-h-[300px] sm:min-h-[440px]'}`}
               >
                 <div className="flex-1 h-full min-h-[280px] sm:min-h-[400px]">
@@ -1348,10 +1435,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Right Column: Dynamic Role Panel (Rider / Driver Partner / Admin) (5 Cols) */}
+              {/* Right Column: Dynamic Role Panel (Rider / Driver Partner / Admin) (5 Cols on md+) */}
               <div 
-                className={`lg:col-span-5 flex flex-col h-full ${
-                  mobileTab === 'map' ? 'hidden lg:flex' : 'flex'
+                className={`md:col-span-5 flex flex-col h-full ${
+                  mobileTab === 'map' ? 'hidden md:flex' : 'flex'
                 }`}
               >
                 {renderRolePanel()}
@@ -1361,8 +1448,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile Bottom Quick-Access Bar (Screens < lg) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-slate-800/90 backdrop-blur-md px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl">
+      {/* Mobile Bottom Quick-Access Bar (Screens < md) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-slate-800/90 backdrop-blur-md px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl">
         <div className="flex items-center justify-around">
           <button
             id="mobile-nav-rider"
@@ -1557,6 +1644,14 @@ export default function App() {
         isOpen={isDriverWizardOpen}
         onClose={() => setIsDriverWizardOpen(false)}
         onRegisterDriver={handleAddDriver}
+      />
+
+      {/* Bandaranaike International Airport (CMB) Live Flight Tracker Modal */}
+      <CMBFlightTrackerModal
+        isOpen={showFlightTrackerModal}
+        onClose={() => setShowFlightTrackerModal(false)}
+        currency={settings.currency}
+        onSelectFlightForPickup={handleSelectFlightForPickup}
       />
     </div>
   );

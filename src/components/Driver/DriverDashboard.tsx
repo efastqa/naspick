@@ -66,6 +66,8 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [selectedBank, setSelectedBank] = useState(driver?.bankDetails?.bankName || 'Commercial Bank of Ceylon');
   const [accountNumber, setAccountNumber] = useState(driver?.bankDetails?.accountNumber || '8004921045');
   const [payoutSuccess, setPayoutSuccess] = useState('');
+  const [payoutError, setPayoutError] = useState('');
+  const [declineNotice, setDeclineNotice] = useState('');
 
   useEffect(() => {
     if (driver?.bankDetails) {
@@ -157,13 +159,14 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
 
   const handlePayoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setPayoutError('');
     const amount = parseInt(payoutAmount, 10);
     if (!amount || amount <= 0) {
-      alert('Please enter a valid payout amount in LKR');
+      setPayoutError('Please enter a valid payout amount in LKR');
       return;
     }
     if (amount > driver.walletBalanceLkr) {
-      alert(`Requested amount exceeds available balance of LKR ${driver.walletBalanceLkr.toLocaleString()}`);
+      setPayoutError(`Requested amount exceeds available balance of LKR ${driver.walletBalanceLkr.toLocaleString()}`);
       return;
     }
 
@@ -365,10 +368,19 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                   </div>
                 </div>
 
+                {declineNotice && (
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-semibold">
+                    {declineNotice}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <button
                     id="driver-decline-ride-btn"
-                    onClick={() => alert('Trip request declined. Returning to radar.')}
+                    onClick={() => {
+                      setDeclineNotice('Trip request passed. Radar active.');
+                      setTimeout(() => setDeclineNotice(''), 3000);
+                    }}
                     className="py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition-colors"
                   >
                     Decline
@@ -800,6 +812,12 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                   className="w-full py-2.5 px-3 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
+
+              {payoutError && (
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-semibold">
+                  {payoutError}
+                </div>
+              )}
 
               {payoutSuccess && (
                 <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-semibold">

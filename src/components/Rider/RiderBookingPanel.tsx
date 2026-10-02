@@ -55,8 +55,10 @@ import {
   CustomerSavedPlace,
   PRIMARY_SAFETY_CONTACT,
   PRIMARY_SAFETY_CONTACT_INTL,
-  DriverPickupTracking
+  DriverPickupTracking,
+  CurrencyMode
 } from '../../types';
+import { formatPrice } from '../../utils/currencyUtils';
 import { 
   SRI_LANKA_LOCATIONS, 
   VEHICLE_OPTIONS, 
@@ -123,6 +125,8 @@ interface RiderBookingPanelProps {
   lastTrip?: Ride | null;
   onRebookTrip?: (trip: Ride) => void;
   onOpenDriverWizard?: () => void;
+  currency?: CurrencyMode;
+  onOpenFlightTracker?: () => void;
 }
 
 export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
@@ -156,6 +160,8 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
   lastTrip,
   onRebookTrip,
   onOpenDriverWizard,
+  currency = 'LKR',
+  onOpenFlightTracker,
 }) => {
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
   const activeVehicleOptions = vehicleOptions && vehicleOptions.length > 0 ? vehicleOptions : VEHICLE_OPTIONS;
@@ -795,6 +801,7 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
           onRebookTrip={onRebookTrip}
           surgeMultiplier={surgeMultiplier}
           onOpenDriverWizard={onOpenDriverWizard}
+          onOpenFlightTracker={onOpenFlightTracker}
         />
       ) : (
         /* ---------------- STEP 2: ROUTE PLANNING & VEHICLE BOOKING ---------------- */
@@ -1566,10 +1573,19 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                           </div>
                         </div>
 
-                        {/* Fare in LKR */}
+                        {/* Fare in Selected Currency */}
                         <div className="text-right">
                           <span className="text-sm font-bold text-white font-heading block">
-                            LKR {vehTotal.toLocaleString()}
+                            {currency !== 'LKR' ? (
+                              <>
+                                <span>{formatPrice(vehTotal, currency as CurrencyMode)}</span>
+                                <span className="block text-[10px] text-slate-400 font-normal">
+                                  LKR {vehTotal.toLocaleString()}
+                                </span>
+                              </>
+                            ) : (
+                              <span>LKR {vehTotal.toLocaleString()}</span>
+                            )}
                           </span>
                           <span className="text-[10px] text-slate-400">
                             {Math.round(veh.perKmLkr)} LKR/km
@@ -1722,8 +1738,13 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                       {showFareBreakdown ? 'Hide details' : 'Fare details'}
                     </button>
                     <p className="text-lg font-black text-white font-heading leading-none mt-0.5">
-                      LKR {fare.totalLkr.toLocaleString()}
+                      {currency !== 'LKR' ? formatPrice(fare.totalLkr, currency as CurrencyMode) : `LKR ${fare.totalLkr.toLocaleString()}`}
                     </p>
+                    {currency !== 'LKR' && (
+                      <span className="text-[10px] text-slate-400 block font-normal">
+                        ≈ LKR {fare.totalLkr.toLocaleString()}
+                      </span>
+                    )}
                   </div>
                 </div>
 

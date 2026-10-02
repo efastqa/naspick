@@ -78,6 +78,7 @@ export const AddDriverModal: React.FC<AddDriverModalProps> = ({
   const [hasAc, setHasAc] = useState(false);
   const [isPoliceVerified, setIsPoliceVerified] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState('');
 
   if (!isOpen) return null;
 
@@ -144,8 +145,9 @@ export const AddDriverModal: React.FC<AddDriverModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!name.trim()) {
-      alert('Please enter Driver Full Name');
+      setFormError('Please enter Driver Full Name');
       return;
     }
 
@@ -264,6 +266,12 @@ export const AddDriverModal: React.FC<AddDriverModalProps> = ({
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 flex-1">
+          {formError && (
+            <div className="p-3 bg-rose-500/15 border border-rose-500/40 text-rose-300 rounded-xl text-xs font-semibold">
+              {formError}
+            </div>
+          )}
+
           {submitted && (
             <div className="p-4 bg-emerald-500/20 border border-emerald-500/50 rounded-xl flex items-center gap-3 text-emerald-300">
               <CheckCircle2 className="w-5 h-5 flex-shrink-0" />

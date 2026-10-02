@@ -15,7 +15,8 @@ import {
   Clock, 
   Navigation,
   Flame,
-  ArrowRight
+  ArrowRight,
+  Plane
 } from 'lucide-react';
 import { 
   LocationPoint, 
@@ -39,6 +40,7 @@ interface RiderHomeServicesViewProps {
   onRebookTrip?: (trip: Ride) => void;
   surgeMultiplier: number;
   onOpenDriverWizard?: () => void;
+  onOpenFlightTracker?: () => void;
 }
 
 export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
@@ -55,6 +57,7 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
   onRebookTrip,
   surgeMultiplier,
   onOpenDriverWizard,
+  onOpenFlightTracker,
 }) => {
   // 5 Top Popular Sri Lanka Quick Destinations
   const quickDestinations = [
@@ -323,6 +326,38 @@ export const RiderHomeServicesView: React.FC<RiderHomeServicesViewProps> = ({
           </div>
         </button>
       </div>
+
+      {/* 4.5. Airport Flight Tracker & Express Transfer Banner */}
+      {onOpenFlightTracker && (
+        <div 
+          id="home-airport-tracker-banner"
+          onClick={onOpenFlightTracker}
+          className="p-3.5 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/60 border border-sky-500/30 hover:border-sky-500/60 rounded-2xl flex items-center justify-between gap-3 cursor-pointer shadow-md group transition-all"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/40 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <Plane className="w-5 h-5 text-sky-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black text-white group-hover:text-sky-300 transition-colors">
+                  Bandaranaike Airport (CMB) Tracker
+                </span>
+                <span className="px-1.5 py-0.2 bg-sky-500/20 text-sky-300 text-[9px] font-bold rounded-full">
+                  LIVE
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                Track arrivals (UL, EK, QR, SQ) & book chauffeur transfer with E03 Highway
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-bold text-sky-400 flex-shrink-0">
+            <span className="hidden sm:inline">Track Flights</span>
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </div>
+      )}
 
       {/* 5. Quick Destinations Horizontal Strip */}
       <div className="space-y-2">

@@ -35,7 +35,8 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
             }`}
           >
-            {lang.label}
+            <span className="hidden sm:inline">{lang.label}</span>
+            <span className="sm:hidden text-[11px]">{lang.sub}</span>
           </button>
         );
       })}

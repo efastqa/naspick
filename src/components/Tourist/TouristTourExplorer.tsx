@@ -39,9 +39,10 @@ export const TouristTourExplorer: React.FC<TouristTourExplorerProps> = ({
   // Conversion rates (approximate for display)
   const currencyRates: Record<CurrencyMode, { symbol: string; rateFromLkr: number }> = {
     LKR: { symbol: 'LKR', rateFromLkr: 1 },
-    USD: { symbol: '$', rateFromLkr: 1 / 300 },
-    EUR: { symbol: '€', rateFromLkr: 1 / 325 },
-    GBP: { symbol: '£', rateFromLkr: 1 / 380 },
+    USD: { symbol: '$', rateFromLkr: 1 / 302.5 },
+    EUR: { symbol: '€', rateFromLkr: 1 / 328.0 },
+    GBP: { symbol: '£', rateFromLkr: 1 / 394.0 },
+    AUD: { symbol: 'A$', rateFromLkr: 1 / 198.5 },
   };
 
   const formatPrice = (lkrAmount: number) => {

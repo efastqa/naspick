@@ -227,7 +227,27 @@ export interface DriverApplication {
 
 export type DeviceViewMode = 'web' | 'mobile' | 'tablet';
 
-export type CurrencyMode = 'LKR' | 'USD' | 'EUR' | 'GBP';
+export type CurrencyMode = 'LKR' | 'USD' | 'EUR' | 'GBP' | 'AUD';
+
+export interface CMBFlight {
+  id: string;
+  flightNumber: string;
+  airline: string;
+  airlineLogoCode: string;
+  originCity: string;
+  originAirport: string;
+  originCode: string;
+  scheduledTime: string;
+  estimatedTime: string;
+  status: 'Landed' | 'On Time' | 'Delayed' | 'Approaching' | 'Scheduled';
+  terminal: string;
+  gate: string;
+  baggageBelt: string;
+  aircraft: string;
+  recommendedVehicle: VehicleCategory;
+  defaultDropoffName?: string;
+  defaultDropoffCity?: string;
+}
 
 export interface AppSettings {
   deviceViewMode: DeviceViewMode;

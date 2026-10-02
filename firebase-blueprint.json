@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "Driver": {
+      "title": "Driver",
+      "description": "Registered driver partner vehicle and operational status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "avatar": { "type": "string" },
+        "vehicleCategory": { "type": "string", "enum": ["tuk", "nano", "sedan", "van", "moto"] },
+        "vehicleModel": { "type": "string" },
+        "vehiclePlate": { "type": "string" },
+        "vehicleColor": { "type": "string" },
+        "rating": { "type": "number" },
+        "totalTrips": { "type": "number" },
+        "isOnline": { "type": "boolean" },
+        "isBusy": { "type": "boolean" },
+        "currentLat": { "type": "number" },
+        "currentLng": { "type": "number" },
+        "heading": { "type": "number" },
+        "earningsTodayLkr": { "type": "number" },
+        "walletBalanceLkr": { "type": "number" },
+        "nicNumber": { "type": "string" }
+      },
+      "required": ["id", "name", "phone", "vehicleCategory", "vehiclePlate"]
+    },
+    "Ride": {
+      "title": "Ride",
+      "description": "Active or historical trip, courier delivery, or airport transfer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "riderPhone": { "type": "string" },
+        "vehicleCategory": { "type": "string" },
+        "status": { "type": "string", "enum": ["idle", "searching", "accepted", "arriving", "in_progress", "completed", "cancelled"] },
+        "otp": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "currency": { "type": "string" },
+        "flightNumber": { "type": "string" },
+        "isScheduled": { "type": "boolean" },
+        "scheduledTime": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "riderPhone", "status"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Passenger or customer account profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "rewardPoints": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Platform global configuration and fees",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "surgeMultiplier": { "type": "number" },
+        "expresswayTollLkr": { "type": "number" },
+        "currency": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/drivers/{driverId}": {
+      "schema": "Driver",
+      "description": "Collection of driver partners"
+    },
+    "/rides/{rideId}": {
+      "schema": "Ride",
+      "description": "Collection of trips and orders"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of passenger profiles"
+    },
+    "/system_settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "Global settings and tolls"
+    }
+  }
+}

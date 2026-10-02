@@ -73,6 +73,7 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSuccessComplete, setIsSuccessComplete] = useState<boolean>(false);
+  const [validationError, setValidationError] = useState<string>('');
 
   // Step 1: Personal Details (Blank for real driver live onboarding)
   const [name, setName] = useState('');
@@ -195,13 +196,14 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
   };
 
   const handleFinalSubmit = () => {
+    setValidationError('');
     if (!name.trim()) {
-      alert('Please enter your full legal name in Step 1');
+      setValidationError('Please enter your full legal name in Step 1');
       setCurrentStep(1);
       return;
     }
     if (!plateNumber.trim()) {
-      alert('Please enter your vehicle license plate number in Step 2');
+      setValidationError('Please enter your vehicle license plate number in Step 2');
       setCurrentStep(2);
       return;
     }
@@ -385,6 +387,22 @@ export const DriverRegistrationWizardModal: React.FC<DriverRegistrationWizardMod
 
         {/* Step Body Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+          {validationError && !isSuccessComplete && (
+            <div className="p-3 bg-rose-500/15 border border-rose-500/40 text-rose-300 rounded-2xl text-xs flex items-center justify-between gap-2 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <span>{validationError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setValidationError('')}
+                className="text-rose-400 hover:text-rose-200"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {isSuccessComplete ? (
             /* Celebration Screen */
             <div className="text-center py-6 sm:py-8 space-y-4 animate-in zoom-in-95 duration-200">

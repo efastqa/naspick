@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Connection test collection
+    match /test/{testId} {
+      allow read: if true;
+    }
+
+    // Drivers collection
+    match /drivers/{driverId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.id != null;
+      allow delete: if false;
+    }
+
+    // Rides collection
+    match /rides/{rideId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.id != null;
+      allow delete: if false;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.id != null;
+      allow delete: if false;
+    }
+
+    // System settings collection
+    match /system_settings/{settingId} {
+      allow read: if true;
+      allow write: if request.resource.data.id != null;
+    }
+
+    // Default deny for unmatched collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
