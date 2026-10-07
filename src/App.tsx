@@ -18,6 +18,7 @@ import { CustomerAuthModal } from './components/Customer/CustomerAuthModal';
 import { AppSeparationAdviceModal } from './components/Common/AppSeparationAdviceModal';
 import { DriverRegistrationWizardModal } from './components/Driver/DriverRegistrationWizardModal';
 import { CMBFlightTrackerModal } from './components/Tourist/CMBFlightTrackerModal';
+import { useRealtimeSocket } from './hooks/useRealtimeSocket';
 import { testFirebaseConnection } from './firebase';
 import { subscribeToDrivers, saveDriverToCloud, saveRideToCloud } from './services/firebaseService';
 import { SRI_LANKA_LOCATIONS, VEHICLE_OPTIONS } from './data/mockLocations';
@@ -88,12 +89,24 @@ export default function App() {
   const [dropoff, setDropoff] = useState<LocationPoint>(SRI_LANKA_LOCATIONS[1]); // Fort Railway Station
   const [intermediateStops, setIntermediateStops] = useState<LocationPoint[]>([]);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
+
+  // Helper to strictly prevent duplicate driver entries
+  const deduplicateDrivers = (list: Driver[]): Driver[] => {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set<string>();
+    return list.filter((d) => {
+      if (!d || !d.id || seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+  };
+
   const [drivers, setDrivers] = useState<Driver[]>(() => {
     try {
       const saved = localStorage.getItem('naspick_registered_drivers');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return deduplicateDrivers(parsed);
       }
     } catch {}
     return []; // Clean empty fleet: default drivers removed so user can add fresh real drivers
@@ -420,9 +433,10 @@ export default function App() {
     testFirebaseConnection();
     const unsubFirestoreDrivers = subscribeToDrivers((cloudDrivers) => {
       if (cloudDrivers && cloudDrivers.length > 0) {
-        setDrivers(cloudDrivers);
+        const unique = deduplicateDrivers(cloudDrivers);
+        setDrivers(unique);
         try {
-          localStorage.setItem('naspick_registered_drivers', JSON.stringify(cloudDrivers));
+          localStorage.setItem('naspick_registered_drivers', JSON.stringify(unique));
         } catch {}
       }
     });
@@ -432,15 +446,20 @@ export default function App() {
       .then((data) => {
         if (data.drivers && Array.isArray(data.drivers)) {
           if (data.drivers.length > 0) {
-            setDrivers(data.drivers);
+            const unique = deduplicateDrivers(data.drivers);
+            setDrivers(unique);
+            try {
+              localStorage.setItem('naspick_registered_drivers', JSON.stringify(unique));
+            } catch {}
           } else {
             // Check if local storage has registered drivers and sync up
             const saved = localStorage.getItem('naspick_registered_drivers');
             if (saved) {
               const parsed = JSON.parse(saved);
               if (Array.isArray(parsed) && parsed.length > 0) {
-                setDrivers(parsed);
-                parsed.forEach((d) => {
+                const uniqueSaved = deduplicateDrivers(parsed);
+                setDrivers(uniqueSaved);
+                uniqueSaved.forEach((d) => {
                   fetch('/api/drivers/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -927,7 +946,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.driver) {
-        setDrivers((prev) => [data.driver, ...prev]);
+        setDrivers((prev) => deduplicateDrivers([data.driver, ...prev]));
         setSelectedDriverId(data.driver.id);
         setCurrentRole('driver');
         saveDriverToCloud(data.driver);
@@ -970,7 +989,7 @@ export default function App() {
           accountHolder: newDriverData.bankDetails?.accountHolder || (newDriverData.name || 'Driver Partner'),
         },
       };
-      setDrivers((prev) => [fullDriver, ...prev]);
+      setDrivers((prev) => deduplicateDrivers([fullDriver, ...prev]));
       setSelectedDriverId(fallbackId);
       setCurrentRole('driver');
       saveDriverToCloud(fullDriver);
@@ -989,8 +1008,9 @@ export default function App() {
       const res = await fetch('/api/drivers/reset', { method: 'POST' });
       const data = await res.json();
       if (data.drivers) {
-        setDrivers(data.drivers);
-        setSelectedDriverId(data.drivers[0]?.id || 'drv_1');
+        const unique = deduplicateDrivers(data.drivers);
+        setDrivers(unique);
+        setSelectedDriverId(unique[0]?.id || 'drv_1');
         triggerPush('Fleet Reset', 'Driver list successfully restored to 10 verified Sri Lankan drivers.');
         addSms(
           PRIMARY_SAFETY_CONTACT,
@@ -999,8 +1019,9 @@ export default function App() {
         );
       }
     } catch (e) {
-      setDrivers(INITIAL_DRIVERS);
-      setSelectedDriverId(INITIAL_DRIVERS[0]?.id || 'drv_1');
+      const unique = deduplicateDrivers(INITIAL_DRIVERS);
+      setDrivers(unique);
+      setSelectedDriverId(unique[0]?.id || 'drv_1');
     }
   };
 
@@ -1039,7 +1060,7 @@ export default function App() {
       // Refresh drivers
       const drvRes = await fetch('/api/drivers');
       const drvData = await drvRes.json();
-      if (drvData.drivers) setDrivers(drvData.drivers);
+      if (drvData.drivers) setDrivers(deduplicateDrivers(drvData.drivers));
     } catch (e) {
       setApplications((prev) =>
         prev.map((a) => (a.id === applicationId ? { ...a, status: action === 'approve' ? 'approved' : 'rejected' } : a))
@@ -1061,6 +1082,122 @@ export default function App() {
 
   // Active driver resolution (null if no drivers registered yet)
   const activeDriver = drivers.find((d) => d.id === selectedDriverId) || drivers[0] || null;
+
+  // Real-time WebSocket & Live GPS synchronization engine
+  const {
+    isConnected: isWsConnected,
+    latencyMs: wsLatencyMs,
+    packetsCount: wsPacketsCount,
+    liveTelemetry,
+    isDeviceGpsActive,
+    isSimulatingGps,
+    startDeviceGps,
+    stopDeviceGps,
+    startSimulatedGpsDrive,
+    stopSimulatedGpsDrive,
+  } = useRealtimeSocket({
+    userRole: currentRole,
+    driverId: selectedDriverId || (drivers[0]?.id || ''),
+    onRideRequested: (ride) => {
+      if (ride) {
+        setActiveRide(ride);
+        playAudioChime(659.25);
+        triggerPush('New Ride Request!', `Match at ${ride.pickup.name} (${ride.vehicleCategory})`);
+      }
+    },
+    onRideAccepted: (ride) => {
+      if (ride) {
+        setActiveRide(ride);
+        playAudioChime(587.33);
+        triggerPush('Driver Assigned', `Driver ${ride.driver?.name} accepted your ride!`);
+      }
+    },
+    onRideArrived: (ride, geofenceTriggered) => {
+      if (ride) {
+        setActiveRide(ride);
+        playAudioChime(784.00);
+        triggerPush(
+          geofenceTriggered ? 'Geofence Alert: Driver Arrived!' : 'Driver Arrived',
+          `Your driver ${ride.driver?.name} has arrived at ${ride.pickup.name}.`
+        );
+      }
+    },
+    onRideStarted: (ride) => {
+      if (ride) {
+        setActiveRide(ride);
+        triggerPush('Trip In Progress', `Heading to ${ride.dropoff.name}.`);
+      }
+    },
+    onRideCompleted: (ride) => {
+      if (ride) {
+        setCompletedRideForRating(ride);
+        setShowRatingModal(true);
+        setActiveRide(null);
+        setPastTrips((prev) => [ride, ...prev.filter((r) => r.id !== ride.id)]);
+        triggerPush('Trip Completed', `Fare total: LKR ${ride.fare.totalLkr.toLocaleString()}.`);
+      }
+    },
+    onRideCancelled: (msg) => {
+      setActiveRide(null);
+      triggerPush('Ride Cancelled', msg || 'Your ride was cancelled.');
+    },
+    onDriverLocationUpdated: (data) => {
+      if (data && data.driverId) {
+        setDrivers((prev) =>
+          prev.map((d) =>
+            d.id === data.driverId
+              ? {
+                  ...d,
+                  currentLat: typeof data.lat === 'number' ? data.lat : d.currentLat,
+                  currentLng: typeof data.lng === 'number' ? data.lng : d.currentLng,
+                  heading: typeof data.heading === 'number' ? data.heading : d.heading,
+                  isOnline: data.isOnline !== undefined ? data.isOnline : d.isOnline,
+                  isBusy: data.isBusy !== undefined ? data.isBusy : d.isBusy,
+                }
+              : d
+          )
+        );
+
+        setActiveRide((prev) => {
+          if (!prev || !prev.driver || prev.driver.id !== data.driverId) return prev;
+          return {
+            ...prev,
+            driver: {
+              ...prev.driver,
+              currentLat: typeof data.lat === 'number' ? data.lat : prev.driver.currentLat,
+              currentLng: typeof data.lng === 'number' ? data.lng : prev.driver.currentLng,
+              heading: typeof data.heading === 'number' ? data.heading : prev.driver.heading,
+            },
+          };
+        });
+      }
+    },
+  });
+
+  const handleToggleDeviceGps = () => {
+    if (isDeviceGpsActive) {
+      stopDeviceGps();
+      triggerPush('Device GPS Stopped', 'Switched back to standard tracking.');
+    } else {
+      startDeviceGps();
+      triggerPush('Live Device GPS Active', 'Streaming high-accuracy phone coordinates over WebSockets.');
+    }
+  };
+
+  const handleToggleSimulatedGps = () => {
+    if (isSimulatingGps) {
+      stopSimulatedGpsDrive();
+      triggerPush('GPS Simulation Stopped', 'Route patrol stopped.');
+    } else {
+      const active = activeDriver || drivers[0];
+      const startLat = active ? active.currentLat : 6.9248;
+      const startLng = active ? active.currentLng : 79.8492;
+      const targetLat = activeRide ? activeRide.pickup.lat : (dropoff?.lat || 6.9344);
+      const targetLng = activeRide ? activeRide.pickup.lng : (dropoff?.lng || 79.8428);
+      startSimulatedGpsDrive(startLat, startLng, targetLat, targetLng);
+      triggerPush('Live GPS Patrol Started', 'Simulating road drive with real-time WebSocket telemetry.');
+    }
+  };
 
   // Render the core active role panel
   const renderRolePanel = () => {
@@ -1097,6 +1234,7 @@ export default function App() {
             onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
             currency={settings.currency}
             onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
+            pickupTracking={liveTelemetry}
           />
         );
       case 'driver':
@@ -1116,6 +1254,13 @@ export default function App() {
             onOpenAddDriver={() => setIsDriverWizardOpen(true)}
             onResetDrivers={handleResetDrivers}
             onClearDrivers={handleClearDrivers}
+            isWsConnected={isWsConnected}
+            wsLatencyMs={wsLatencyMs}
+            isDeviceGpsActive={isDeviceGpsActive}
+            onToggleDeviceGps={handleToggleDeviceGps}
+            isSimulatingGps={isSimulatingGps}
+            onToggleSimulatedGps={handleToggleSimulatedGps}
+            liveTelemetry={liveTelemetry}
           />
         );
       case 'admin':
@@ -1276,6 +1421,7 @@ export default function App() {
                     userRole={currentRole}
                     selectedCityHub={selectedCityHub}
                     onSelectCityHub={handleSelectCityHub}
+                    pickupTracking={liveTelemetry}
                   />
                 </div>
 
@@ -1332,6 +1478,7 @@ export default function App() {
                         userRole={currentRole}
                         selectedCityHub={selectedCityHub}
                         onSelectCityHub={handleSelectCityHub}
+                        pickupTracking={liveTelemetry}
                       />
                     </div>
                   </div>
@@ -1417,6 +1564,7 @@ export default function App() {
                     userRole={currentRole}
                     selectedCityHub={selectedCityHub}
                     onSelectCityHub={handleSelectCityHub}
+                    pickupTracking={liveTelemetry}
                   />
                 </div>
 
@@ -1426,6 +1574,16 @@ export default function App() {
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span>Target Focus Hub: <strong className="text-slate-200 uppercase">{selectedCityHub}</strong> (Colombo • Kandy • Kurunegala • Negombo)</span>
                   </div>
+                  
+                  {/* Real-time WebSocket GPS Sync Badge */}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950 border border-emerald-500/30 text-emerald-400 font-mono text-[11px] shadow-sm">
+                    <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                    <span className="font-semibold">{isWsConnected ? 'Live GPS Sync: Connected' : 'GPS Reconnecting'}</span>
+                    <span className="text-slate-500">|</span>
+                    <span className="text-slate-200">{wsLatencyMs}ms</span>
+                    <span className="text-slate-400 hidden lg:inline">({wsPacketsCount} pkts)</span>
+                  </div>
+
                   <div>
                     <span>Currency: <strong className="text-emerald-400">{settings.currency}</strong></span>
                   </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Navigation, 
   MapPin, 
@@ -55,6 +55,16 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
   // Animated driver position on the map
   const [driverPosPercent, setDriverPosPercent] = useState(0);
   const [showDriverHeading, setShowDriverHeading] = useState(true);
+
+  // Guarantee strict driver uniqueness by id
+  const uniqueDrivers = useMemo(() => {
+    const seen = new Set<string>();
+    return (drivers || []).filter((d) => {
+      if (!d || !d.id || seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+  }, [drivers]);
 
   // Real-time animation loop along route
   useEffect(() => {
@@ -621,7 +631,7 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
         })}
 
         {/* DRIVERS / FLEET ACROSS COLOMBO, KANDY, KURUNEGALA, NEGOMBO */}
-        {drivers.map((drv) => {
+        {uniqueDrivers.map((drv) => {
           const pos = projectCoord(drv.currentLat, drv.currentLng);
           const isAssigned = activeRide?.driver?.id === drv.id;
           if (isAssigned) return null;
@@ -947,8 +957,8 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900/95 border border-slate-800 rounded-lg text-[10px] sm:text-[11px] text-slate-300 backdrop-blur-md pointer-events-auto shadow-lg max-w-[85%] truncate">
           <LocateFixed className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="truncate">
-            {drivers.filter((d) => d.isOnline).length > 0 ? (
-              <>Tracking <strong className="text-white">{drivers.filter((d) => d.isOnline).length} Active Drivers</strong> across Colombo, Kandy, Kurunegala & Negombo</>
+            {uniqueDrivers.filter((d) => d.isOnline).length > 0 ? (
+              <>Tracking <strong className="text-white">{uniqueDrivers.filter((d) => d.isOnline).length} Active Drivers</strong> across Colombo, Kandy, Kurunegala & Negombo</>
             ) : (
               <>Fleet Radar Online • <strong className="text-emerald-400">Ready for Live Drivers</strong> (Register via "Drive with Us" to go online)</>
             )}

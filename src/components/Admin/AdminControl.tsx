@@ -161,7 +161,9 @@ export const AdminControl: React.FC<AdminControlProps> = ({
   const pendingApps = applications.filter((a) => a.status === 'pending');
   const onlineDrivers = drivers.filter((d) => d.isOnline);
 
+  const seenFilteredIds = new Set<string>();
   const filteredDrivers = drivers.filter((drv) => {
+    if (!drv || !drv.id || seenFilteredIds.has(drv.id)) return false;
     const matchesCategory = fleetCategoryFilter === 'all' || drv.vehicleCategory === fleetCategoryFilter;
     const hub = getDriverCityHub(drv);
     const matchesCity = fleetCityFilter === 'all' || hub === fleetCityFilter;
@@ -173,7 +175,11 @@ export const AdminControl: React.FC<AdminControlProps> = ({
       drv.vehicleModel.toLowerCase().includes(q) ||
       drv.phone.includes(q) ||
       hub.includes(q);
-    return matchesCategory && matchesCity && matchesSearch;
+    if (matchesCategory && matchesCity && matchesSearch) {
+      seenFilteredIds.add(drv.id);
+      return true;
+    }
+    return false;
   });
 
   // Sri Lanka Platform Financials (LKR)

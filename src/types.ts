@@ -292,3 +292,32 @@ export interface CustomerUser {
   lastLoginLocation?: CustomerLoginLocation;
 }
 
+export interface RealtimeTelemetryUpdate {
+  driverId: string;
+  lat: number;
+  lng: number;
+  heading: number;
+  speedKmH: number;
+  timestamp: number;
+  isOnline?: boolean;
+  isBusy?: boolean;
+}
+
+export interface WsMessagePayload {
+  type:
+    | 'init:state'
+    | 'driver:location_update'
+    | 'driver:location_updated'
+    | 'driver:status_update'
+    | 'ride:requested'
+    | 'ride:accepted'
+    | 'ride:arrived'
+    | 'ride:started'
+    | 'ride:completed'
+    | 'ride:cancelled'
+    | 'telemetry:ping'
+    | 'telemetry:pong';
+  data?: any;
+  timestamp?: number;
+}
+

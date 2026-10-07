@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Power, 
   Navigation, 
@@ -40,6 +40,13 @@ interface DriverDashboardProps {
   onOpenAddDriver?: () => void;
   onResetDrivers?: () => void;
   onClearDrivers?: () => void;
+  isWsConnected?: boolean;
+  wsLatencyMs?: number;
+  isDeviceGpsActive?: boolean;
+  onToggleDeviceGps?: () => void;
+  isSimulatingGps?: boolean;
+  onToggleSimulatedGps?: () => void;
+  liveTelemetry?: any;
 }
 
 export const DriverDashboard: React.FC<DriverDashboardProps> = ({
@@ -57,6 +64,13 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
   onOpenAddDriver,
   onResetDrivers,
   onClearDrivers,
+  isWsConnected = true,
+  wsLatencyMs = 18,
+  isDeviceGpsActive = false,
+  onToggleDeviceGps,
+  isSimulatingGps = false,
+  onToggleSimulatedGps,
+  liveTelemetry,
 }) => {
   const [activeTab, setActiveTab] = useState<'cockpit' | 'earnings' | 'trips' | 'vehicle'>('cockpit');
   const [enteredOtp, setEnteredOtp] = useState('');
@@ -68,6 +82,16 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
   const [payoutSuccess, setPayoutSuccess] = useState('');
   const [payoutError, setPayoutError] = useState('');
   const [declineNotice, setDeclineNotice] = useState('');
+
+  // Deduplicate driver options by id
+  const uniqueAllDrivers = useMemo(() => {
+    const seen = new Set<string>();
+    return (allDrivers || []).filter((d) => {
+      if (!d || !d.id || seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+  }, [allDrivers]);
 
   useEffect(() => {
     if (driver?.bankDetails) {
@@ -194,7 +218,7 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
               onChange={(e) => onSelectDriver && onSelectDriver(e.target.value)}
               className="bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-xs text-white font-semibold focus:outline-none"
             >
-              {allDrivers.map((d) => (
+              {uniqueAllDrivers.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name} ({d.vehicleCategory.toUpperCase()} • {d.vehiclePlate})
                 </option>
@@ -546,6 +570,70 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({
                 )}
               </div>
             )}
+
+            {/* REAL-TIME GPS & WEBSOCKET TELEMETRY PANEL */}
+            <div className="p-4 bg-slate-950/70 border border-emerald-500/30 rounded-2xl flex flex-col gap-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${isWsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    Real-Time GPS & Live Sync
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30">
+                  {isWsConnected ? `WS Active • ${wsLatencyMs}ms` : 'Connecting...'}
+                </span>
+              </div>
+
+              {/* Live Telemetry Readout */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Speed</span>
+                  <span className="font-bold text-white font-mono">{liveTelemetry?.speedKmH || (isSimulatingGps ? 36 : 0)} km/h</span>
+                </div>
+                <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Heading</span>
+                  <span className="font-bold text-emerald-400 font-mono">{driver.heading}°</span>
+                </div>
+                <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Latitude</span>
+                  <span className="font-bold text-slate-200 font-mono">{driver.currentLat.toFixed(4)}</span>
+                </div>
+                <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Longitude</span>
+                  <span className="font-bold text-slate-200 font-mono">{driver.currentLng.toFixed(4)}</span>
+                </div>
+              </div>
+
+              {/* Live GPS Controls */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={onToggleDeviceGps}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
+                    isDeviceGpsActive
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                      : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800'
+                  }`}
+                >
+                  <Radio className={`w-3.5 h-3.5 ${isDeviceGpsActive ? 'animate-spin' : ''}`} />
+                  <span>{isDeviceGpsActive ? 'Phone GPS Active' : 'Enable Device GPS'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onToggleSimulatedGps}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all ${
+                    isSimulatingGps
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                      : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800'
+                  }`}
+                >
+                  <Navigation className={`w-3.5 h-3.5 ${isSimulatingGps ? 'animate-pulse rotate-45' : ''}`} />
+                  <span>{isSimulatingGps ? 'Stop Route Patrol' : 'Start Live GPS Drive'}</span>
+                </button>
+              </div>
+            </div>
 
             {/* Quick Metrics Bar */}
             <div className="grid grid-cols-3 gap-2 text-center">

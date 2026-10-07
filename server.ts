@@ -1,8 +1,11 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { WebSocketServer, WebSocket } from 'ws';
 
 const app = express();
+const server = http.createServer(app);
 const PORT = 3000;
 
 app.use(express.json());
@@ -377,6 +380,121 @@ function dispatchSms(recipientPhone: string, message: string, type: any) {
   return newSms;
 }
 
+// ---------------- WEBSOCKET SERVER & REAL-TIME DISPATCH ENGINE ----------------
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+function computeDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = (lat2 - lat1) * 111320;
+  const dLng = (lng2 - lng1) * 111320 * Math.cos(((lat1 + lat2) / 2 * Math.PI) / 180);
+  return Math.round(Math.sqrt(dLat * dLat + dLng * dLng));
+}
+
+function broadcastWs(message: { type: string; data?: any; timestamp?: number }, excludeWs?: WebSocket) {
+  const payload = JSON.stringify({ ...message, timestamp: Date.now() });
+  wss.clients.forEach((client) => {
+    if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        console.error('WS broadcast error:', err);
+      }
+    }
+  });
+}
+
+wss.on('connection', (ws) => {
+  // Send current fleet & active ride on initial connection
+  ws.send(JSON.stringify({
+    type: 'init:state',
+    data: {
+      drivers,
+      activeRide,
+      surgeMultiplier,
+    },
+    timestamp: Date.now(),
+  }));
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type === 'telemetry:ping') {
+        ws.send(JSON.stringify({ type: 'telemetry:pong', timestamp: Date.now() }));
+        return;
+      }
+
+      if (msg.type === 'driver:location_update') {
+        const { driverId, lat, lng, heading, speedKmH, isOnline, isBusy } = msg.data || {};
+        const driver = drivers.find((d) => d.id === driverId);
+        if (driver) {
+          if (typeof lat === 'number') driver.currentLat = lat;
+          if (typeof lng === 'number') driver.currentLng = lng;
+          if (typeof heading === 'number') driver.heading = heading;
+          if (typeof isOnline === 'boolean') driver.isOnline = isOnline;
+          if (typeof isBusy === 'boolean') driver.isBusy = isBusy;
+        }
+
+        let telemetry = null;
+        if (activeRide && activeRide.driver && activeRide.driver.id === driverId) {
+          activeRide.driver.currentLat = lat;
+          activeRide.driver.currentLng = lng;
+          if (typeof heading === 'number') activeRide.driver.heading = heading;
+
+          const isApproaching = activeRide.status === 'accepted' || activeRide.status === 'arriving';
+          const target = isApproaching ? activeRide.pickup : activeRide.dropoff;
+          if (target && typeof target.lat === 'number') {
+            const distM = computeDistanceMeters(lat, lng, target.lat, target.lng);
+            const currentSpeed = speedKmH || 32;
+            const etaMins = Math.max(1, Math.round(distM / ((currentSpeed * 1000) / 60)));
+            const progressPercent = Math.min(1, Math.max(0, 1 - distM / 2200));
+
+            // Auto-Geofence detection: if driver reaches within 120m of pickup
+            if (distM <= 120 && activeRide.status === 'accepted') {
+              activeRide.status = 'arriving';
+              broadcastWs({
+                type: 'ride:arrived',
+                data: { ride: activeRide, geofenceTriggered: true, distanceMeters: distM },
+              });
+              dispatchSms(
+                activeRide.riderPhone,
+                `Naspick Geofence Alert: Your driver ${activeRide.driver.name} has arrived at ${activeRide.pickup.name}. Share OTP ${activeRide.otp} to start.`,
+                'driver_arrived'
+              );
+            }
+
+            telemetry = {
+              distanceMeters: distM,
+              etaMinutes: etaMins,
+              speedKmH: currentSpeed,
+              progressPercent,
+              currentRoadName: isApproaching ? `Approaching ${activeRide.pickup.name}` : `En route to ${activeRide.dropoff.name}`,
+              hasArrivedAtPickup: distM <= 120 || activeRide.status === 'arriving',
+              driverHeadingDeg: heading || 0,
+              isFollowDriverActive: true,
+            };
+          }
+        }
+
+        // Broadcast driver position update to all other connected clients
+        broadcastWs({
+          type: 'driver:location_updated',
+          data: {
+            driverId,
+            lat,
+            lng,
+            heading,
+            speedKmH,
+            isOnline,
+            isBusy,
+            telemetry,
+          },
+        }, ws);
+      }
+    } catch (e) {
+      console.error('WS parse error:', e);
+    }
+  });
+});
+
 // ---------------- API ROUTES ----------------
 
 // Health check
@@ -390,8 +508,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Get all drivers
+// Get all drivers (deduplicated by id)
 app.get('/api/drivers', (req, res) => {
+  const seenIds = new Set<string>();
+  drivers = drivers.filter((d) => {
+    if (!d || !d.id || seenIds.has(d.id)) return false;
+    seenIds.add(d.id);
+    return true;
+  });
   res.json({
     success: true,
     drivers,
@@ -410,6 +534,11 @@ app.post('/api/drivers/status', (req, res) => {
   if (currentLat) driver.currentLat = currentLat;
   if (currentLng) driver.currentLng = currentLng;
   if (heading !== undefined) driver.heading = heading;
+
+  broadcastWs({
+    type: 'driver:status_update',
+    data: { driverId, isOnline: driver.isOnline, currentLat: driver.currentLat, currentLng: driver.currentLng, heading: driver.heading, driver },
+  });
 
   res.json({ success: true, driver });
 });
@@ -450,7 +579,18 @@ app.post('/api/drivers/add', (req, res) => {
     nicNumber: newDriver.nicNumber || '199000000000',
   };
 
-  drivers.unshift(driverToInsert);
+  const existingIndex = drivers.findIndex(
+    (d) => (driverToInsert.id && d.id === driverToInsert.id) ||
+           (driverToInsert.vehiclePlate && d.vehiclePlate === driverToInsert.vehiclePlate)
+  );
+
+  if (existingIndex >= 0) {
+    drivers[existingIndex] = { ...drivers[existingIndex], ...driverToInsert };
+    broadcastWs({ type: 'driver:location_updated', data: { driver: drivers[existingIndex] } });
+    return res.json({ success: true, driver: drivers[existingIndex], totalDrivers: drivers.length });
+  } else {
+    drivers.unshift(driverToInsert);
+  }
 
   // Dispatch Welcome SMS to the new driver
   dispatchSms(
@@ -459,18 +599,28 @@ app.post('/api/drivers/add', (req, res) => {
     'payout'
   );
 
+  broadcastWs({ type: 'driver:location_updated', data: { driver: driverToInsert } });
+
   res.json({ success: true, driver: driverToInsert, totalDrivers: drivers.length });
 });
 
-// Reset driver list to default roster
+// Reset driver list to default roster (deduplicated)
 app.post('/api/drivers/reset', (req, res) => {
-  drivers = JSON.parse(JSON.stringify(DEFAULT_DRIVERS));
+  const seen = new Set<string>();
+  const uniqueDefault = DEFAULT_DRIVERS.filter((d) => {
+    if (!d || !d.id || seen.has(d.id)) return false;
+    seen.add(d.id);
+    return true;
+  });
+  drivers = JSON.parse(JSON.stringify(uniqueDefault));
+  broadcastWs({ type: 'init:state', data: { drivers, activeRide, surgeMultiplier } });
   res.json({ success: true, message: 'Driver fleet successfully reset to default 10 authentic Sri Lankan drivers.', drivers });
 });
 
 // Clear all drivers to start completely fresh
 app.post('/api/drivers/clear', (req, res) => {
   drivers = [];
+  broadcastWs({ type: 'init:state', data: { drivers: [], activeRide: null, surgeMultiplier } });
   res.json({ success: true, message: 'All drivers cleared. Fleet is now fresh and ready for live driver registration.', drivers: [] });
 });
 
@@ -552,6 +702,9 @@ app.post('/api/rides/request', (req, res) => {
 
   activeRide = newRide;
 
+  // Broadcast instant ride request event to all online drivers
+  broadcastWs({ type: 'ride:requested', data: { ride: newRide } });
+
   // Send automated SMS to Rider via Sri Lankan gateway
   dispatchSms(
     newRide.riderPhone,
@@ -574,6 +727,7 @@ app.post('/api/rides/arrived', (req, res) => {
   if (!activeRide) return res.status(400).json({ error: 'No active ride' });
 
   activeRide.status = 'arriving';
+  broadcastWs({ type: 'ride:arrived', data: { ride: activeRide } });
 
   dispatchSms(
     activeRide.riderPhone,
@@ -595,6 +749,7 @@ app.post('/api/rides/start', (req, res) => {
 
   activeRide.status = 'in_progress';
   activeRide.startedAt = Date.now();
+  broadcastWs({ type: 'ride:started', data: { ride: activeRide } });
 
   dispatchSms(
     activeRide.riderPhone,
@@ -634,6 +789,7 @@ app.post('/api/rides/complete', (req, res) => {
   );
 
   const completed = activeRide;
+  broadcastWs({ type: 'ride:completed', data: { ride: completed, driverNetEarnings } });
   // Keep activeRide completed so frontend shows summary/rating
   res.json({ success: true, ride: completed, driverNetEarnings });
 });
@@ -650,6 +806,7 @@ app.post('/api/rides/cancel', (req, res) => {
     );
   }
   activeRide = null;
+  broadcastWs({ type: 'ride:cancelled', data: { message: 'Ride cancelled' } });
   res.json({ success: true, message: 'Ride cancelled' });
 });
 
@@ -681,6 +838,7 @@ app.post('/api/rides/rate', (req, res) => {
 // Dismiss active completed ride
 app.post('/api/rides/dismiss', (req, res) => {
   activeRide = null;
+  broadcastWs({ type: 'ride:cancelled', data: { message: 'Ride dismissed' } });
   res.json({ success: true });
 });
 
@@ -789,7 +947,12 @@ app.post('/api/admin/verify-driver', (req, res) => {
       verificationStatus: 'approved',
       nicNumber: appItem.nic,
     };
-    drivers.push(newDriver);
+    const existingIndex = drivers.findIndex((d) => d.id === newDriver.id || d.vehiclePlate === newDriver.vehiclePlate);
+    if (existingIndex >= 0) {
+      drivers[existingIndex] = newDriver;
+    } else {
+      drivers.push(newDriver);
+    }
 
     dispatchSms(
       appItem.phone,
@@ -826,8 +989,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Naspick backend & frontend server listening on http://0.0.0.0:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Naspick backend & frontend server listening on http://0.0.0.0:${PORT} (HTTP + WebSockets)`);
   });
 }
 
