@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navigation/Navbar';
+import { NaspickLogo } from './components/Common/NaspickLogo';
 import { SriLankaMap } from './components/Map/SriLankaMap';
 import { RiderBookingPanel } from './components/Rider/RiderBookingPanel';
 import { TripRatingModal } from './components/Rider/TripRatingModal';
@@ -18,6 +19,9 @@ import { CustomerAuthModal } from './components/Customer/CustomerAuthModal';
 import { AppSeparationAdviceModal } from './components/Common/AppSeparationAdviceModal';
 import { DriverRegistrationWizardModal } from './components/Driver/DriverRegistrationWizardModal';
 import { CMBFlightTrackerModal } from './components/Tourist/CMBFlightTrackerModal';
+import { UberBottomNav, UberNavTab } from './components/Navigation/UberBottomNav';
+import { UberAccountModal } from './components/Account/UberAccountModal';
+import { UberServicesModal } from './components/Services/UberServicesModal';
 import { useRealtimeSocket } from './hooks/useRealtimeSocket';
 import { testFirebaseConnection } from './firebase';
 import { subscribeToDrivers, saveDriverToCloud, saveRideToCloud } from './services/firebaseService';
@@ -36,30 +40,24 @@ import {
   VehicleCategory, 
   VehicleOption,
   Language, 
-  DeviceViewMode, 
   AppSettings, 
   CustomerUser,
   CityHubId,
-  CurrencyMode,
+  BookingServiceMode,
   CMBFlight,
-  PRIMARY_SAFETY_CONTACT, 
-  PRIMARY_SAFETY_CONTACT_INTL 
+  PRIMARY_SAFETY_CONTACT
 } from './types';
 import { 
   Wifi, 
   Battery, 
   Signal, 
-  Tablet, 
-  Smartphone, 
-  Monitor, 
   ShieldCheck,
   Map as MapIcon,
-  Car,
-  User,
-  Lock,
-  MessageSquare,
-  Layers,
-  Compass
+  Sun,
+  Moon,
+  ArrowLeft,
+  UserPlus,
+  Car
 } from 'lucide-react';
 
 let uniqueEventIdCounter = 0;
@@ -76,9 +74,6 @@ export default function App() {
         const roleParam = params.get('role') || params.get('mode');
         if (roleParam === 'driver' || roleParam === 'captain') return 'driver';
         if (roleParam === 'admin') return 'admin';
-        if (roleParam === 'rider' || roleParam === 'passenger') return 'rider';
-        const saved = localStorage.getItem('naspick_preferred_role');
-        if (saved === 'driver' || saved === 'admin') return saved;
       }
     } catch {}
     return 'rider';
@@ -127,22 +122,60 @@ export default function App() {
   const [applications, setApplications] = useState<DriverApplication[]>(INITIAL_DRIVER_APPLICATIONS);
   const [surgeMultiplier, setSurgeMultiplier] = useState<number>(1.0);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [settings, setSettings] = useState<AppSettings>({
-    deviceViewMode: 'web',
-    currency: 'LKR',
-    language: 'en',
-    soundAlertsEnabled: true,
-    lowDataMode: false,
-    highContrastMap: false,
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    let savedTheme: 'dark' | 'light' = 'dark';
+    try {
+      const saved = localStorage.getItem('naspick_theme');
+      if (saved === 'light' || saved === 'dark') savedTheme = saved;
+    } catch {}
+    return {
+      deviceViewMode: 'web',
+      currency: 'LKR',
+      language: 'en',
+      soundAlertsEnabled: true,
+      lowDataMode: false,
+      highContrastMap: false,
+      theme: savedTheme,
+    };
   });
   const [showSmsDrawer, setShowSmsDrawer] = useState<boolean>(false);
   const [showRatingModal, setShowRatingModal] = useState<boolean>(false);
   const [showFlightTrackerModal, setShowFlightTrackerModal] = useState<boolean>(false);
   const [completedRideForRating, setCompletedRideForRating] = useState<Ride | null>(null);
 
+  // Uber-Style Core Bottom & Top Navigation State
+  const [activeNavTab, setActiveNavTab] = useState<UberNavTab>('home');
+  const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
+  const [showServicesModal, setShowServicesModal] = useState<boolean>(false);
+  const [selectedServiceMode, setSelectedServiceMode] = useState<BookingServiceMode>('ride');
+
   // Focus City Hub Selection (Galle, Colombo, Kandy, Kurunegala, Negombo)
   const [selectedCityHub, setSelectedCityHub] = useState<CityHubId>('all');
   const [mobileTab, setMobileTab] = useState<'panel' | 'map' | 'split'>('split');
+
+  const handleSelectNavTab = (tab: UberNavTab) => {
+    setActiveNavTab(tab);
+    if (tab === 'home') {
+      setCurrentRole('rider');
+      setMobileTab('panel');
+      setShowAccountModal(false);
+      setShowServicesModal(false);
+    } else if (tab === 'services') {
+      setShowServicesModal(true);
+    } else if (tab === 'activity') {
+      setShowTripHistoryModal(true);
+    } else if (tab === 'account') {
+      setShowAccountModal(true);
+    }
+  };
+
+  const handleSelectServiceFromCatalog = (service: BookingServiceMode) => {
+    setSelectedServiceMode(service);
+    setCurrentRole('rider');
+    setMobileTab('panel');
+    setActiveNavTab('home');
+    setShowServicesModal(false);
+  };
 
   const handleSelectCityHub = (hub: CityHubId) => {
     setSelectedCityHub(hub);
@@ -369,16 +402,21 @@ export default function App() {
   };
 
   const handleSelectRole = (role: 'rider' | 'driver' | 'admin') => {
-    if (role === 'admin') {
-      if (!isAdminAuthenticated) {
-        setShowAdminPasswordModal(true);
-        return;
-      }
+    if (role === 'admin' && !isAdminAuthenticated) {
+      setShowAdminPasswordModal(true);
+      return;
     }
     setCurrentRole(role);
-    try {
-      localStorage.setItem('naspick_preferred_role', role);
-    } catch {}
+    if (role === 'rider') {
+      setActiveNavTab('home');
+      try {
+        localStorage.removeItem('naspick_preferred_role');
+      } catch {}
+    } else {
+      try {
+        localStorage.setItem('naspick_preferred_role', role);
+      } catch {}
+    }
   };
 
   const handleAdminAuthenticated = () => {
@@ -390,6 +428,10 @@ export default function App() {
   const handleLockAdmin = () => {
     setIsAdminAuthenticated(false);
     setCurrentRole('rider');
+    setActiveNavTab('home');
+    try {
+      localStorage.removeItem('naspick_preferred_role');
+    } catch {}
   };
 
   // SMS and Push list
@@ -538,11 +580,29 @@ export default function App() {
     setSmsList((prev) => [newSms, ...prev.filter((s) => s.id !== id)]);
   };
 
+  // Synchronize active theme with document.documentElement
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (settings.theme === 'light') {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
+    }
+  }, [settings.theme]);
+
   const handleUpdateSettings = (newSettings: Partial<AppSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       if (newSettings.language && newSettings.language !== language) {
         setLanguage(newSettings.language);
+      }
+      if (newSettings.theme) {
+        try {
+          localStorage.setItem('naspick_theme', newSettings.theme);
+        } catch {}
       }
       return updated;
     });
@@ -1235,6 +1295,7 @@ export default function App() {
             currency={settings.currency}
             onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
             pickupTracking={liveTelemetry}
+            initialServiceMode={selectedServiceMode}
           />
         );
       case 'driver':
@@ -1324,223 +1385,246 @@ export default function App() {
     }
   };
 
+  const isLightTheme = settings.theme === 'light';
+  const onlineFleetCount = drivers.filter((d) => d.isOnline).length;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950 w-full overflow-x-hidden">
-      {/* Top Navbar */}
-      <Navbar
-        currentRole={currentRole}
-        onSelectRole={handleSelectRole}
-        isAdminAuthenticated={isAdminAuthenticated}
-        deviceViewMode={settings.deviceViewMode}
-        onSelectDeviceViewMode={(mode) => handleUpdateSettings({ deviceViewMode: mode })}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenSmsDrawer={() => setShowSmsDrawer(true)}
-        unreadSmsCount={smsList.length}
-        language={language}
-        onSelectLanguage={(lang) => {
-          setLanguage(lang);
-          handleUpdateSettings({ language: lang });
-        }}
-        customerUser={customerUser}
-        onOpenCustomerAuth={() => setIsCustomerAuthModalOpen(true)}
-        onOpenTripHistory={() => setShowTripHistoryModal(true)}
-        pastTripsCount={pastTrips.length}
-        onOpenAdviceModal={() => setShowAdviceModal(true)}
-        onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
-        currency={settings.currency}
-        onSelectCurrency={(c) => handleUpdateSettings({ currency: c })}
-        onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
-      />
-
-      {/* Main App Canvas */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-5 flex flex-col pb-24 md:pb-5">
-        {/* VIEWPORT MODE 1: MOBILE SMARTPHONE SIMULATOR */}
-        {settings.deviceViewMode === 'mobile' && (
-          <div className="flex-1 flex items-center justify-center py-0 sm:py-4">
-            <div className="w-full max-w-[440px] h-[calc(100vh-140px)] sm:h-[820px] bg-slate-900 border-0 sm:border-[10px] border-slate-800 rounded-2xl sm:rounded-[50px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] ring-0 sm:ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
-              {/* Smartphone Status Bar & Dynamic Island (Desktop Preview Only) */}
-              <div className="hidden sm:flex h-10 bg-slate-950 px-6 items-center justify-between text-[11px] font-bold text-slate-300 select-none z-30">
-                <span>09:41</span>
-                {/* Dynamic Island Pill */}
-                <div className="w-24 h-4 bg-black rounded-full border border-slate-800 flex items-center justify-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[8px] text-slate-400 font-mono">NASPICK LK</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-400">
-                  <Signal className="w-3 h-3 text-slate-300" />
-                  <Wifi className="w-3 h-3 text-slate-300" />
-                  <Battery className="w-3.5 h-3.5 text-slate-300" />
-                </div>
-              </div>
-
-              {/* Mobile View Mode Switcher Header inside Simulator */}
-              <div className="flex items-center justify-between p-2 bg-slate-950 border-b border-slate-800 z-20">
-                <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5 pl-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span className="truncate">{selectedCityHub === 'all' ? 'Radar' : selectedCityHub.toUpperCase()}</span>
+    <div className={`min-h-screen ${isLightTheme ? 'light bg-slate-100 text-slate-900' : 'dark bg-slate-950 text-slate-100'} flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950 w-full overflow-x-hidden`}>
+      {/* ===================================================================== */}
+      {/* SHELL A: DEDICATED ADMIN MANAGEMENT PORTAL                             */}
+      {/* ===================================================================== */}
+      {currentRole === 'admin' && (
+        <>
+          <header
+            className={`w-full sticky top-0 z-40 border-b backdrop-blur-md transition-colors ${
+              isLightTheme
+                ? 'bg-white/95 border-slate-200 text-slate-900'
+                : 'bg-slate-950/95 border-slate-800 text-slate-100'
+            }`}
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <NaspickLogo size="sm" showSubtitle={false} />
+                <span className="text-xs sm:text-sm font-semibold text-amber-500 border-l border-slate-300 dark:border-slate-700 pl-3 truncate">
+                  Admin Panel
                 </span>
-                <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[10px] font-bold">
-                  <button
-                    onClick={() => setMobileTab('panel')}
-                    className={`px-2.5 py-1 rounded transition-all ${
-                      mobileTab === 'panel' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Panel
-                  </button>
-                  <button
-                    onClick={() => setMobileTab('map')}
-                    className={`px-2.5 py-1 rounded transition-all flex items-center gap-1 ${
-                      mobileTab === 'map' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <MapIcon className="w-3 h-3" />
-                    <span>Map</span>
-                  </button>
-                  <button
-                    onClick={() => setMobileTab('split')}
-                    className={`px-2.5 py-1 rounded transition-all ${
-                      mobileTab === 'split' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Split
-                  </button>
-                </div>
-              </div>
-
-              {/* Mobile Content Area */}
-              <div className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Embedded Map (Shown in map mode or split mode) */}
-                <div className={`${mobileTab === 'panel' ? 'hidden' : mobileTab === 'map' ? 'flex-1 h-full' : 'h-56 sm:h-64'} w-full flex-shrink-0 transition-all`}>
-                  <SriLankaMap
-                    pickup={pickup}
-                    dropoff={dropoff}
-                    intermediateStops={intermediateStops}
-                    activeRide={activeRide}
-                    drivers={drivers}
-                    userRole={currentRole}
-                    selectedCityHub={selectedCityHub}
-                    onSelectCityHub={handleSelectCityHub}
-                    pickupTracking={liveTelemetry}
-                  />
-                </div>
-
-                {/* Mobile Screen Body (Shown in panel mode or split mode) */}
-                <div className={`flex-1 overflow-y-auto bg-slate-900 ${mobileTab === 'map' ? 'hidden' : 'flex flex-col'}`}>
-                  {renderRolePanel()}
-                </div>
-              </div>
-
-              {/* Mobile Bottom Home Bar Indicator (Desktop Preview Only) */}
-              <div className="hidden sm:flex h-5 bg-slate-950 items-center justify-center">
-                <div className="w-32 h-1 bg-slate-600 rounded-full"></div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* VIEWPORT MODE 2: TABLET (TAB) SIMULATOR (iPad / Galaxy Tab) */}
-        {settings.deviceViewMode === 'tablet' && (
-          <div className="flex-1 flex items-center justify-center py-2 sm:py-4">
-            <div className="w-full max-w-[860px] h-full sm:h-[860px] bg-slate-900 border-2 sm:border-[14px] border-slate-800 rounded-2xl sm:rounded-[38px] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)] ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
-              {/* Tablet Top Bezel with Front Camera & Ambient Sensor */}
-              <div className="h-7 bg-slate-950 px-6 flex items-center justify-between text-[11px] font-bold text-slate-300 select-none z-30 border-b border-slate-800/80">
-                <div className="flex items-center gap-2">
-                  <span>09:41</span>
-                  <span className="text-[10px] text-slate-500 font-mono">NASPICK TAB</span>
-                </div>
-                {/* Front Camera Lens Dot */}
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center">
-                    <div className="w-1 h-1 rounded-full bg-emerald-500/80"></div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Signal className="w-3 h-3 text-slate-300" />
-                  <Wifi className="w-3 h-3 text-slate-300" />
-                  <span className="text-[10px] text-slate-400">98%</span>
-                  <Battery className="w-3.5 h-3.5 text-slate-300" />
-                </div>
-              </div>
-
-              {/* Tablet Screen Body (Balanced 2-Column Responsive Layout) */}
-              <div className="flex-1 overflow-y-auto md:overflow-hidden p-3 bg-slate-950/60 flex flex-col">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 flex-1 overflow-visible md:overflow-hidden">
-                  {/* Tablet Left: Map & Route View */}
-                  <div className="md:col-span-6 flex flex-col h-[320px] md:h-full overflow-hidden rounded-2xl border border-slate-800">
-                    <div className="flex-1 min-h-[280px]">
-                      <SriLankaMap
-                        pickup={pickup}
-                        dropoff={dropoff}
-                        intermediateStops={intermediateStops}
-                        activeRide={activeRide}
-                        drivers={drivers}
-                        userRole={currentRole}
-                        selectedCityHub={selectedCityHub}
-                        onSelectCityHub={handleSelectCityHub}
-                        pickupTracking={liveTelemetry}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Tablet Right: Scrollable Role Panel */}
-                  <div className="md:col-span-6 flex flex-col flex-1 overflow-y-auto pr-1">
-                    {renderRolePanel()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Tablet Bottom Bezel with Home Indicator */}
-              <div className="h-5 bg-slate-950 flex items-center justify-center border-t border-slate-800/80">
-                <div className="w-40 h-1 bg-slate-600 rounded-full"></div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* VIEWPORT MODE 3: FULL WEB DESKTOP FLUID VIEW */}
-        {settings.deviceViewMode === 'web' && (
-          <div className="flex flex-col flex-1">
-            {/* Mobile View Segmented Switcher (Screens < md) */}
-            <div className="md:hidden flex items-center justify-between p-2 sm:p-2.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-md">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="truncate">
-                  {selectedCityHub === 'all' ? 'Sri Lanka Radar' : `${selectedCityHub.toUpperCase()} Hub`}
+                <span className="hidden md:inline text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                  · {onlineFleetCount} online
                 </span>
               </div>
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px] font-bold">
+
+              <div className="flex items-center gap-2 shrink-0">
                 <button
-                  id="mobile-tab-booking"
+                  type="button"
+                  onClick={() => handleUpdateSettings({ theme: isLightTheme ? 'dark' : 'light' })}
+                  className={`min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border transition-colors ${
+                    isLightTheme
+                      ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                  }`}
+                  title={isLightTheme ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+                  aria-label="Toggle theme"
+                >
+                  {isLightTheme ? <Sun className="w-4 h-4 text-amber-600" /> : <Moon className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectRole('driver')}
+                  className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors hidden sm:flex items-center gap-1.5 ${
+                    isLightTheme
+                      ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <Car className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Driver App</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="admin-exit-to-customer-btn"
+                  onClick={() => handleSelectRole('rider')}
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors flex items-center gap-1.5"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Customer App</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+            {!isAdminAuthenticated ? (
+              <div className="max-w-md mx-auto mt-10 p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-4 shadow-sm">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold font-heading">Admin Panel Sign-In</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                    Driver verification, fleet control, and fare management require the administrator passkey.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    id="unlock-admin-gate-btn"
+                    onClick={() => setShowAdminPasswordModal(true)}
+                    className="w-full sm:w-auto min-h-[42px] py-2 px-5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Enter Passkey</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectRole('rider')}
+                    className="w-full sm:w-auto min-h-[42px] py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold rounded-xl transition-colors"
+                  >
+                    Back to Customer App
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 pt-1">
+                  Default Key: <span className="font-mono font-bold">{adminPassword}</span>
+                </p>
+              </div>
+            ) : (
+              <AdminControl
+                drivers={drivers}
+                applications={applications}
+                onVerifyDriver={handleVerifyDriver}
+                surgeMultiplier={surgeMultiplier}
+                onUpdateSurge={handleUpdateSurge}
+                onOpenAddDriver={() => setIsAddDriverModalOpen(true)}
+                onResetDrivers={handleResetDrivers}
+                onClearDrivers={handleClearDrivers}
+                onToggleDriverStatus={handleToggleDriverStatus}
+                onLockAdmin={handleLockAdmin}
+                adminPassword={adminPassword}
+                onSaveAdminPassword={handleSaveAdminPassword}
+                vehicleOptions={vehicleOptions}
+                onUpdateVehiclePricing={handleUpdateVehiclePricing}
+                onResetVehiclePricing={handleResetVehiclePricing}
+                expresswayTollLkr={expresswayTollLkr}
+                onUpdateExpresswayToll={handleUpdateExpresswayToll}
+                liveMapNode={
+                  <div className="h-[520px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+                    <SriLankaMap
+                      pickup={pickup}
+                      dropoff={dropoff}
+                      intermediateStops={intermediateStops}
+                      activeRide={activeRide}
+                      drivers={drivers}
+                      userRole="admin"
+                      selectedCityHub={selectedCityHub}
+                      onSelectCityHub={handleSelectCityHub}
+                      pickupTracking={liveTelemetry}
+                      theme={settings.theme || 'dark'}
+                    />
+                  </div>
+                }
+              />
+            )}
+          </main>
+        </>
+      )}
+
+      {/* ===================================================================== */}
+      {/* SHELL B: DEDICATED DRIVER PARTNER APP                                 */}
+      {/* ===================================================================== */}
+      {currentRole === 'driver' && (
+        <>
+          <header
+            className={`w-full sticky top-0 z-40 border-b backdrop-blur-md transition-colors ${
+              isLightTheme
+                ? 'bg-white/95 border-slate-200 text-slate-900'
+                : 'bg-slate-950/95 border-slate-800 text-slate-100'
+            }`}
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <NaspickLogo size="sm" showSubtitle={false} />
+                <span className="text-xs sm:text-sm font-semibold text-emerald-500 border-l border-slate-300 dark:border-slate-700 pl-3 truncate">
+                  Driver App
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateSettings({ theme: isLightTheme ? 'dark' : 'light' })}
+                  className={`min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border transition-colors ${
+                    isLightTheme
+                      ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                  }`}
+                  title={isLightTheme ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+                  aria-label="Toggle theme"
+                >
+                  {isLightTheme ? <Sun className="w-4 h-4 text-amber-600" /> : <Moon className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsDriverWizardOpen(true)}
+                  className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors hidden sm:flex items-center gap-1.5 ${
+                    isLightTheme
+                      ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Register Vehicle</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectRole('admin')}
+                  className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors hidden md:flex items-center gap-1.5 ${
+                    isLightTheme
+                      ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Admin Panel</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="driver-exit-to-customer-btn"
+                  onClick={() => handleSelectRole('rider')}
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors flex items-center gap-1.5"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Customer App</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 flex flex-col">
+            <div className="md:hidden flex items-center justify-between p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl mb-3">
+              <span className="text-xs font-semibold pl-1">Driver View</span>
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-lg text-xs font-semibold">
+                <button
+                  type="button"
                   onClick={() => setMobileTab('panel')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
-                    mobileTab === 'panel'
-                      ? 'bg-emerald-500 text-slate-950 shadow font-extrabold'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-3 py-1 rounded-md ${mobileTab === 'panel' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-500'}`}
                 >
-                  Panel
+                  Cockpit
                 </button>
                 <button
-                  id="mobile-tab-map"
+                  type="button"
                   onClick={() => setMobileTab('map')}
-                  className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1 ${
-                    mobileTab === 'map'
-                      ? 'bg-emerald-500 text-slate-950 shadow font-extrabold'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-3 py-1 rounded-md ${mobileTab === 'map' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-500'}`}
                 >
-                  <MapIcon className="w-3 h-3" />
-                  <span>Map</span>
+                  Map
                 </button>
                 <button
-                  id="mobile-tab-split"
+                  type="button"
                   onClick={() => setMobileTab('split')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
-                    mobileTab === 'split'
-                      ? 'bg-emerald-500 text-slate-950 shadow font-extrabold'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-3 py-1 rounded-md ${mobileTab === 'split' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-500'}`}
                 >
                   Split
                 </button>
@@ -1548,11 +1632,10 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5 flex-1 items-stretch">
-              {/* Left Column: Interactive Map & Live Navigation Engine (7 Cols on md+) */}
-              <div 
-                className={`md:col-span-7 flex flex-col gap-3 ${
+              <div
+                className={`md:col-span-7 flex flex-col ${
                   mobileTab === 'panel' ? 'hidden md:flex' : 'flex'
-                } ${mobileTab === 'map' ? 'min-h-[480px] h-[calc(100vh-230px)]' : 'min-h-[300px] sm:min-h-[440px]'}`}
+                } ${mobileTab === 'map' ? 'min-h-[480px]' : 'min-h-[300px] sm:min-h-[440px]'}`}
               >
                 <div className="flex-1 h-full min-h-[280px] sm:min-h-[400px]">
                   <SriLankaMap
@@ -1561,135 +1644,256 @@ export default function App() {
                     intermediateStops={intermediateStops}
                     activeRide={activeRide}
                     drivers={drivers}
-                    userRole={currentRole}
+                    userRole="driver"
                     selectedCityHub={selectedCityHub}
                     onSelectCityHub={handleSelectCityHub}
                     pickupTracking={liveTelemetry}
+                    theme={settings.theme || 'dark'}
                   />
-                </div>
-
-                {/* Quick Sri Lankan Telemetry Strip */}
-                <div className="p-3 bg-slate-900/70 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs text-slate-400 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>Target Focus Hub: <strong className="text-slate-200 uppercase">{selectedCityHub}</strong> (Colombo • Kandy • Kurunegala • Negombo)</span>
-                  </div>
-                  
-                  {/* Real-time WebSocket GPS Sync Badge */}
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950 border border-emerald-500/30 text-emerald-400 font-mono text-[11px] shadow-sm">
-                    <span className={`w-2 h-2 rounded-full ${isWsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                    <span className="font-semibold">{isWsConnected ? 'Live GPS Sync: Connected' : 'GPS Reconnecting'}</span>
-                    <span className="text-slate-500">|</span>
-                    <span className="text-slate-200">{wsLatencyMs}ms</span>
-                    <span className="text-slate-400 hidden lg:inline">({wsPacketsCount} pkts)</span>
-                  </div>
-
-                  <div>
-                    <span>Currency: <strong className="text-emerald-400">{settings.currency}</strong></span>
-                  </div>
-                  <div className="hidden sm:block">
-                    <span>Telecom SMS: <strong className="text-slate-200">Dialog 4G / Mobitel</strong></span>
-                  </div>
                 </div>
               </div>
 
-              {/* Right Column: Dynamic Role Panel (Rider / Driver Partner / Admin) (5 Cols on md+) */}
-              <div 
-                className={`md:col-span-5 flex flex-col h-full ${
-                  mobileTab === 'map' ? 'hidden md:flex' : 'flex'
-                }`}
-              >
+              <div className={`md:col-span-5 flex flex-col h-full ${mobileTab === 'map' ? 'hidden md:flex' : 'flex'}`}>
                 {renderRolePanel()}
               </div>
             </div>
-          </div>
-        )}
-      </main>
+          </main>
+        </>
+      )}
 
-      {/* Mobile Bottom Quick-Access Bar (Screens < md) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-slate-800/90 backdrop-blur-md px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl">
-        <div className="flex items-center justify-around">
-          <button
-            id="mobile-nav-rider"
-            onClick={() => {
-              handleSelectRole('rider');
-              setMobileTab('panel');
-            }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-bold transition-all min-h-[44px] justify-center ${
-              currentRole === 'rider' && mobileTab !== 'map'
-                ? 'text-emerald-400 bg-emerald-500/10'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            <span>Book</span>
-          </button>
+      {/* ===================================================================== */}
+      {/* SHELL C: PURE CUSTOMER RIDING APP                                     */}
+      {/* ===================================================================== */}
+      {currentRole === 'rider' && (
+        <>
+          <Navbar
+            activeNavTab={activeNavTab}
+            onSelectNavTab={handleSelectNavTab}
+            customerUser={customerUser}
+            pastTripsCount={pastTrips.length}
+            theme={settings.theme || 'dark'}
+            onToggleTheme={() => handleUpdateSettings({ theme: isLightTheme ? 'dark' : 'light' })}
+            onOpenAccountModal={() => setShowAccountModal(true)}
+          />
 
-          <button
-            id="mobile-nav-map"
-            onClick={() => setMobileTab('map')}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-bold transition-all min-h-[44px] justify-center ${
-              mobileTab === 'map'
-                ? 'text-emerald-400 bg-emerald-500/10'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <div className="relative">
-              <MapIcon className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            </div>
-            <span>Live Map</span>
-          </button>
+          <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-5 flex flex-col pb-20 md:pb-5">
+            {/* VIEWPORT MODE 1: MOBILE SMARTPHONE SIMULATOR */}
+            {settings.deviceViewMode === 'mobile' && (
+              <div className="flex-1 flex items-center justify-center py-0 sm:py-4">
+                <div className="w-full max-w-[440px] h-[calc(100vh-140px)] sm:h-[820px] bg-slate-900 border-0 sm:border-[10px] border-slate-800 rounded-2xl sm:rounded-[50px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] ring-0 sm:ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
+                  <div className="hidden sm:flex h-10 bg-slate-950 px-6 items-center justify-between text-[11px] font-bold text-slate-300 select-none z-30">
+                    <span>09:41</span>
+                    <div className="w-24 h-4 bg-black rounded-full border border-slate-800 flex items-center justify-center">
+                      <span className="text-[8px] text-slate-400 font-mono">NASPICK</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-400">
+                      <Signal className="w-3 h-3 text-slate-300" />
+                      <Wifi className="w-3 h-3 text-slate-300" />
+                      <Battery className="w-3.5 h-3.5 text-slate-300" />
+                    </div>
+                  </div>
 
-          <button
-            id="mobile-nav-driver"
-            onClick={() => {
-              handleSelectRole('driver');
-              setMobileTab('panel');
-            }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-bold transition-all min-h-[44px] justify-center ${
-              currentRole === 'driver' && mobileTab !== 'map'
-                ? 'text-emerald-400 bg-emerald-500/10'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Car className="w-4 h-4" />
-            <span>Driver</span>
-          </button>
+                  <div className="flex items-center justify-between p-2 bg-slate-950 border-b border-slate-800 z-20">
+                    <span className="text-xs font-semibold text-slate-300 pl-1 truncate">
+                      {selectedCityHub === 'all' ? 'Sri Lanka' : selectedCityHub.toUpperCase()}
+                    </span>
+                    <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setMobileTab('panel')}
+                        className={`px-2.5 py-1 rounded transition-all ${
+                          mobileTab === 'panel' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Book
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMobileTab('map')}
+                        className={`px-2.5 py-1 rounded transition-all flex items-center gap-1 ${
+                          mobileTab === 'map' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <MapIcon className="w-3 h-3" />
+                        <span>Map</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMobileTab('split')}
+                        className={`px-2.5 py-1 rounded transition-all ${
+                          mobileTab === 'split' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Split
+                      </button>
+                    </div>
+                  </div>
 
-          <button
-            id="mobile-nav-admin"
-            onClick={() => {
-              handleSelectRole('admin');
-              setMobileTab('panel');
-            }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-bold transition-all min-h-[44px] justify-center ${
-              currentRole === 'admin' && mobileTab !== 'map'
-                ? 'text-emerald-400 bg-emerald-500/10'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {isAdminAuthenticated ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4 text-amber-400" />}
-            <span>Admin</span>
-          </button>
+                  <div className="flex-1 flex flex-col overflow-hidden relative">
+                    <div className={`${mobileTab === 'panel' ? 'hidden' : mobileTab === 'map' ? 'flex-1 h-full' : 'h-56 sm:h-64'} w-full flex-shrink-0 transition-all`}>
+                      <SriLankaMap
+                        pickup={pickup}
+                        dropoff={dropoff}
+                        intermediateStops={intermediateStops}
+                        activeRide={activeRide}
+                        drivers={drivers}
+                        userRole="rider"
+                        selectedCityHub={selectedCityHub}
+                        onSelectCityHub={handleSelectCityHub}
+                        pickupTracking={liveTelemetry}
+                        theme={settings.theme || 'dark'}
+                      />
+                    </div>
 
-          <button
-            id="mobile-nav-sms"
-            onClick={() => setShowSmsDrawer(true)}
-            className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[10px] font-bold text-slate-400 hover:text-slate-200 transition-all min-h-[44px] justify-center relative"
-          >
-            <div className="relative">
-              <MessageSquare className="w-4 h-4" />
-              {smsList.length > 0 && (
-                <span className="absolute -top-1 -right-1.5 px-1 py-0.2 bg-emerald-500 text-slate-950 text-[9px] font-black rounded-full">
-                  {smsList.length}
-                </span>
-              )}
-            </div>
-            <span>Alerts</span>
-          </button>
-        </div>
-      </nav>
+                    <div className={`flex-1 overflow-y-auto bg-slate-900 ${mobileTab === 'map' ? 'hidden' : 'flex flex-col'}`}>
+                      {renderRolePanel()}
+                    </div>
+                  </div>
+
+                  <div className="hidden sm:flex h-5 bg-slate-950 items-center justify-center">
+                    <div className="w-32 h-1 bg-slate-600 rounded-full"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEWPORT MODE 2: TABLET SIMULATOR */}
+            {settings.deviceViewMode === 'tablet' && (
+              <div className="flex-1 flex items-center justify-center py-2 sm:py-4">
+                <div className="w-full max-w-[860px] h-full sm:h-[860px] bg-slate-900 border-2 sm:border-[14px] border-slate-800 rounded-2xl sm:rounded-[38px] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.95)] ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative">
+                  <div className="h-7 bg-slate-950 px-6 flex items-center justify-between text-[11px] font-bold text-slate-300 select-none z-30 border-b border-slate-800/80">
+                    <span>09:41</span>
+                    <span className="text-[10px] text-slate-500 font-mono">NASPICK TAB</span>
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Signal className="w-3 h-3 text-slate-300" />
+                      <Wifi className="w-3 h-3 text-slate-300" />
+                      <Battery className="w-3.5 h-3.5 text-slate-300" />
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto md:overflow-hidden p-3 bg-slate-950/60 flex flex-col">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 flex-1 overflow-visible md:overflow-hidden">
+                      <div className="md:col-span-6 flex flex-col h-[320px] md:h-full overflow-hidden rounded-2xl border border-slate-800">
+                        <div className="flex-1 min-h-[280px]">
+                          <SriLankaMap
+                            pickup={pickup}
+                            dropoff={dropoff}
+                            intermediateStops={intermediateStops}
+                            activeRide={activeRide}
+                            drivers={drivers}
+                            userRole="rider"
+                            selectedCityHub={selectedCityHub}
+                            onSelectCityHub={handleSelectCityHub}
+                            pickupTracking={liveTelemetry}
+                            theme={settings.theme || 'dark'}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-6 flex flex-col flex-1 overflow-y-auto pr-1">
+                        {renderRolePanel()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="h-5 bg-slate-950 flex items-center justify-center border-t border-slate-800/80">
+                    <div className="w-40 h-1 bg-slate-600 rounded-full"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEWPORT MODE 3: CLEAN WEB & MOBILE FLUID VIEW */}
+            {settings.deviceViewMode === 'web' && (
+              <div className="flex flex-col flex-1">
+                <div className="md:hidden flex items-center justify-between p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl mb-3">
+                  <span className="text-xs font-semibold pl-1 truncate">
+                    {selectedCityHub === 'all' ? 'Sri Lanka Map' : selectedCityHub.toUpperCase()}
+                  </span>
+                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-lg text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      id="mobile-tab-booking"
+                      onClick={() => setMobileTab('panel')}
+                      className={`px-3 py-1.5 rounded-md transition-colors ${
+                        mobileTab === 'panel'
+                          ? 'bg-emerald-500 text-slate-950 font-bold'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      Book
+                    </button>
+                    <button
+                      type="button"
+                      id="mobile-tab-map"
+                      onClick={() => setMobileTab('map')}
+                      className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${
+                        mobileTab === 'map'
+                          ? 'bg-emerald-500 text-slate-950 font-bold'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      <MapIcon className="w-3 h-3" />
+                      <span>Map</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="mobile-tab-split"
+                      onClick={() => setMobileTab('split')}
+                      className={`px-3 py-1.5 rounded-md transition-colors ${
+                        mobileTab === 'split'
+                          ? 'bg-emerald-500 text-slate-950 font-bold'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      Split
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5 flex-1 items-stretch">
+                  <div
+                    className={`md:col-span-7 flex flex-col ${
+                      mobileTab === 'panel' ? 'hidden md:flex' : 'flex'
+                    } ${mobileTab === 'map' ? 'min-h-[480px] h-[calc(100vh-200px)]' : 'min-h-[280px] sm:min-h-[440px]'}`}
+                  >
+                    <div className="flex-1 h-full min-h-[280px] sm:min-h-[400px]">
+                      <SriLankaMap
+                        pickup={pickup}
+                        dropoff={dropoff}
+                        intermediateStops={intermediateStops}
+                        activeRide={activeRide}
+                        drivers={drivers}
+                        userRole="rider"
+                        selectedCityHub={selectedCityHub}
+                        onSelectCityHub={handleSelectCityHub}
+                        pickupTracking={liveTelemetry}
+                        theme={settings.theme || 'dark'}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className={`md:col-span-5 flex flex-col h-full ${
+                      mobileTab === 'map' ? 'hidden md:flex' : 'flex'
+                    }`}
+                  >
+                    {renderRolePanel()}
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          <UberBottomNav
+            activeTab={activeNavTab}
+            onSelectTab={handleSelectNavTab}
+            pastTripsCount={pastTrips.length}
+            unreadSmsCount={smsList.length}
+            theme={settings.theme || 'dark'}
+          />
+        </>
+      )}
 
       {/* Page & Device Settings Modal */}
       <PageSettingsModal
@@ -1810,6 +2014,62 @@ export default function App() {
         onClose={() => setShowFlightTrackerModal(false)}
         currency={settings.currency}
         onSelectFlightForPickup={handleSelectFlightForPickup}
+      />
+
+      {/* Account & Settings Modal */}
+      <UberAccountModal
+        isOpen={showAccountModal}
+        onClose={() => {
+          setShowAccountModal(false);
+          setActiveNavTab('home');
+        }}
+        currentRole={currentRole}
+        onSelectRole={(r) => {
+          handleSelectRole(r);
+          setShowAccountModal(false);
+          setActiveNavTab('home');
+        }}
+        isAdminAuthenticated={isAdminAuthenticated}
+        customerUser={customerUser}
+        onOpenCustomerAuth={() => setIsCustomerAuthModalOpen(true)}
+        onOpenDriverWizard={() => setIsDriverWizardOpen(true)}
+        currency={settings.currency}
+        onSelectCurrency={(c) => handleUpdateSettings({ currency: c })}
+        language={language}
+        onSelectLanguage={(lang) => {
+          setLanguage(lang);
+          handleUpdateSettings({ language: lang });
+        }}
+        theme={settings.theme || 'dark'}
+        onToggleTheme={() => handleUpdateSettings({ theme: settings.theme === 'light' ? 'dark' : 'light' })}
+        pastTripsCount={pastTrips.length}
+        onOpenTripHistory={() => setShowTripHistoryModal(true)}
+        onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
+        onOpenAdviceModal={() => setShowAdviceModal(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSmsDrawer={() => setShowSmsDrawer(true)}
+        unreadSmsCount={smsList.length}
+      />
+
+      {/* Uber-Style Services Catalog Modal (Rides, Flash Courier, Airport Express, Tours, Rentals) */}
+      <UberServicesModal
+        isOpen={showServicesModal}
+        onClose={() => {
+          setShowServicesModal(false);
+          setActiveNavTab('home');
+        }}
+        onSelectService={handleSelectServiceFromCatalog}
+        onOpenFlightTracker={() => setShowFlightTrackerModal(true)}
+        onSelectDestination={(loc) => {
+          setDropoff(loc);
+          setSelectedServiceMode('ride');
+          handleSelectRole('rider');
+          setMobileTab('panel');
+          setActiveNavTab('home');
+          setShowServicesModal(false);
+        }}
+        theme={settings.theme || 'dark'}
+        surgeMultiplier={surgeMultiplier}
       />
     </div>
   );

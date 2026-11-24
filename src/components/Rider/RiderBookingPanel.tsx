@@ -127,6 +127,7 @@ interface RiderBookingPanelProps {
   onOpenDriverWizard?: () => void;
   currency?: CurrencyMode;
   onOpenFlightTracker?: () => void;
+  initialServiceMode?: BookingServiceMode;
 }
 
 export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
@@ -162,6 +163,7 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
   onOpenDriverWizard,
   currency = 'LKR',
   onOpenFlightTracker,
+  initialServiceMode,
 }) => {
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
   const activeVehicleOptions = vehicleOptions && vehicleOptions.length > 0 ? vehicleOptions : VEHICLE_OPTIONS;
@@ -173,6 +175,14 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
 
   // Active service mode tab: 'ride' | 'delivery' | 'rental'
   const [serviceMode, setServiceMode] = useState<BookingServiceMode>('ride');
+
+  // Synchronize when initialServiceMode changes from external Services tab
+  useEffect(() => {
+    if (initialServiceMode) {
+      setServiceMode(initialServiceMode);
+      setActiveStep('planning');
+    }
+  }, [initialServiceMode]);
 
   // Core Booking State
   const [selectedCategory, setSelectedCategory] = useState<VehicleCategory>('tuk');
@@ -235,6 +245,7 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
 
   // Easy Opinions & Quick-Pick Priority Filter: 'all' | 'budget' | 'fastest' | 'comfort' | 'group'
   const [easyOpinion, setEasyOpinion] = useState<'all' | 'budget' | 'fastest' | 'comfort' | 'group'>('all');
+  const [showTripOptions, setShowTripOptions] = useState(false);
 
   const handleSwapLocations = () => {
     const temp = pickup;
@@ -970,239 +981,92 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
             </div>
           )}
 
-          {/* TAB 3: REGULAR RIDES & MULTI-STOP BOOKING */}
+          {/* TAB 3: REGULAR RIDES & MULTI-STOP BOOKING (CLEAN SIMPLE FORMAT) */}
           {serviceMode === 'ride' && (
-            <div className="p-5 flex flex-col gap-4 overflow-y-auto">
-              {/* Header Title & Surge Badge */}
-              <div className="flex items-center justify-between">
+            <div className="p-4 sm:p-5 flex flex-col gap-4 overflow-y-auto">
+              {/* Compact Header */}
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-xl font-extrabold text-white font-heading">{t.whereTo}</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">{t.whereToSub}</p>
+                  <h2 className="text-lg font-bold text-white font-heading">{t.whereTo}</h2>
+                  <p className="text-xs text-slate-400">
+                    {totalDistanceKm} km · ~{fare.estimatedMinutes} min
+                  </p>
                 </div>
-                {surgeMultiplier > 1 && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
-                    <Flame className="w-3.5 h-3.5" />
-                    <span>{surgeMultiplier}x Surge Active</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Customer Account & Live Location Integration Bar */}
-              {customerUser?.isLoggedIn ? (
-                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 rounded-xl">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="relative flex-shrink-0">
-                      <img
-                        src={customerUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120'}
-                        alt={customerUser.name}
-                        className="w-8 h-8 rounded-lg object-cover border border-slate-700"
-                      />
-                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-900"></span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-white truncate">{customerUser.name}</span>
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 flex-shrink-0">
-                          {customerUser.tier}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-mono truncate">
-                        {customerUser.phone} • {customerUser.rewardPoints} Naspick Pts
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={onOpenCustomerAuth}
-                    className="px-2.5 py-1 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-lg font-semibold flex items-center gap-1 transition-colors flex-shrink-0"
-                  >
-                    <Navigation className="w-3 h-3" />
-                    <span className="hidden sm:inline">My Places & GPS</span>
-                    <span className="sm:hidden">Places</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">Sign In for 1-Tap Booking</p>
-                      <p className="text-[10px] text-slate-300 truncate">Auto-sync live GPS pickup location & SMS alerts.</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={onOpenCustomerAuth}
-                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg shadow-sm transition-all flex-shrink-0"
-                  >
-                    Sign In
-                  </button>
-                </div>
-              )}
-
-              {/* Focus City Hubs Selector (Colombo, Kandy, Kurunegala, Negombo) */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    Target Focus Hubs
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-medium">
-                    Galle • Colombo • Kandy • Kurunegala • Negombo
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                  {FOCUS_HUBS.map((hub) => {
-                    const isSelected = (selectedCityHub || 'all') === hub.id;
-                    return (
-                      <button
-                        key={hub.id}
-                        type="button"
-                        onClick={() => {
-                          if (onSelectCityHub) onSelectCityHub(hub.id);
-                        }}
-                        className={`p-1.5 rounded-xl border text-left transition-all flex flex-col items-center sm:items-start justify-center ${
-                          isSelected
-                            ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-sm'
-                            : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                        }`}
-                      >
-                        <span className="text-base sm:text-sm">{hub.icon}</span>
-                        <span className="text-[11px] font-bold truncate max-w-full">
-                          {hub.name.split(' ')[0]}
-                        </span>
-                        <span className="hidden sm:inline text-[9px] text-slate-500 truncate">
-                          {hub.sinhalaName}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Popular Target Routes (Intercity & Express Corridor) */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    Popular Target Routes
-                  </span>
-                  <span className="text-[10px] text-slate-500">1-Tap Load Route</span>
-                </div>
-
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                  {POPULAR_TARGET_ROUTES.map((route) => (
+                <div className="flex items-center gap-2">
+                  {surgeMultiplier > 1 && (
+                    <span className="text-xs font-semibold text-amber-400 tabular-nums">
+                      {surgeMultiplier}x demand
+                    </span>
+                  )}
+                  {onOpenCustomerAuth && !customerUser?.isLoggedIn && (
                     <button
-                      key={route.id}
                       type="button"
-                      onClick={() => handleSelectPopularRoute(route)}
-                      className="flex-shrink-0 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-emerald-500/60 transition-all text-left group w-52 flex flex-col justify-between"
+                      onClick={onOpenCustomerAuth}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-semibold rounded-lg transition-colors"
                     >
-                      <div>
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-bold text-emerald-400">
-                            {route.highlightTag}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono font-semibold">
-                            {route.estimatedKm} km
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors truncate">
-                          {route.title}
-                        </p>
-                        <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
-                          {route.subtitle}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-900 mt-2 text-[10px]">
-                        <span className="text-slate-400 capitalize flex items-center gap-1">
-                          <Car className="w-3 h-3 text-sky-400" />
-                          {route.recommendedVehicleId}
-                        </span>
-                        <span className="text-emerald-400 font-semibold group-hover:underline flex items-center gap-0.5">
-                          Select <ChevronRight className="w-3 h-3" />
-                        </span>
-                      </div>
+                      Sign In
                     </button>
-                  ))}
+                  )}
                 </div>
               </div>
 
-              {/* Uber-Style Iconic Connected Route Box */}
-              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl shadow-inner relative space-y-3">
-                {/* Connected Vertical Track Indicator */}
+              {/* Clean From -> To Route Box */}
+              <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-2.5">
                 <div className="flex items-stretch gap-3">
-                  {/* Left Vertical Line with Route Dots */}
-                  <div className="flex flex-col items-center justify-between py-2 flex-shrink-0">
-                    <div className="w-3 h-3 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20"></div>
-                    <div className="w-0.5 flex-1 bg-slate-700 my-1 border-l border-dashed border-slate-500"></div>
-                    <div className="w-3 h-3 bg-white rounded-sm ring-4 ring-slate-800"></div>
+                  {/* Route Line Indicator */}
+                  <div className="flex flex-col items-center justify-between py-3 shrink-0">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
+                    <div className="w-px flex-1 bg-slate-700 my-1"></div>
+                    <div className="w-2.5 h-2.5 bg-white rounded-sm"></div>
                   </div>
 
-                  {/* Middle Interactive Location Selectors */}
-                  <div className="flex-1 flex flex-col gap-2.5 min-w-0">
-                    {/* Pickup Input Card */}
-                    <div className="flex items-center gap-2">
+                  {/* Inputs */}
+                  <div className="flex-1 flex flex-col gap-2 min-w-0">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         id="uber-pickup-trigger"
                         onClick={() => setSearchModalMode('pickup')}
-                        className="flex-1 p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-700/80 hover:border-emerald-500/60 rounded-xl text-left transition-all group"
+                        className="flex-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/60 rounded-xl text-left transition-colors min-w-0"
                       >
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          {t.pickupLocation}
-                        </span>
-                        <p className="text-xs font-bold text-white group-hover:text-emerald-300 truncate mt-0.5">
-                          {pickup.name}
-                        </p>
-                        <p className="text-[10px] text-slate-400 truncate">
-                          {pickup.address} · {pickup.city}
-                        </p>
+                        <span className="text-[11px] text-slate-400 block">{t.pickupLocation}</span>
+                        <p className="text-xs font-semibold text-white truncate">{pickup.name}</p>
                       </button>
 
-                      {/* 1-Tap GPS Button */}
                       <button
                         type="button"
                         id="uber-gps-quick-btn"
                         onClick={handleDetectGpsLocation}
                         disabled={isDetectingGps}
-                        className="p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl transition-colors flex-shrink-0"
-                        title="Use device GPS location"
+                        className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 rounded-xl transition-colors shrink-0"
+                        title="Use GPS location"
                       >
                         {isDetectingGps ? (
-                          <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                          <RefreshCw className="w-4 h-4 animate-spin" />
                         ) : (
-                          <Crosshair className="w-4 h-4 text-emerald-400" />
+                          <Crosshair className="w-4 h-4" />
                         )}
                       </button>
                     </div>
 
-                    {/* Intermediate Stops if any */}
                     {intermediateStops.map((stop, idx) => (
-                      <div key={stop.id} className="flex items-center gap-2 p-2 bg-slate-900 rounded-lg border border-sky-500/30">
-                        <div className="w-5 h-5 rounded bg-sky-500/20 text-sky-400 text-[10px] font-bold flex items-center justify-center">
-                          {idx + 1}
-                        </div>
+                      <div key={stop.id} className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 rounded-xl border border-slate-800">
+                        <span className="text-[11px] font-bold text-sky-400 tabular-nums">{idx + 1}.</span>
                         <button
                           type="button"
                           onClick={() => {
                             setEditingStopIndex(idx);
                             setSearchModalMode('stop');
                           }}
-                          className="flex-1 text-left min-w-0"
+                          className="flex-1 text-left text-xs text-white truncate"
                         >
-                          <span className="text-[9px] text-sky-400 font-bold uppercase block">{t.stop} {idx + 1}</span>
-                          <p className="text-xs text-white truncate">{stop.name}</p>
+                          {stop.name}
                         </button>
                         {onRemoveStop && (
                           <button
                             type="button"
                             onClick={() => onRemoveStop(idx)}
-                            className="p-1 text-slate-500 hover:text-rose-400"
+                            className="p-1 text-slate-400 hover:text-rose-400"
                             title={t.removeStop}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1211,32 +1075,24 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                       </div>
                     ))}
 
-                    {/* Destination Dropoff Input Card */}
                     <button
                       type="button"
                       id="uber-dropoff-trigger"
                       onClick={() => setSearchModalMode('dropoff')}
-                      className="w-full p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-700/80 hover:border-emerald-500/60 rounded-xl text-left transition-all group"
+                      className="w-full px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/60 rounded-xl text-left transition-colors min-w-0"
                     >
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        {t.destination}
-                      </span>
-                      <p className="text-xs font-bold text-white group-hover:text-emerald-300 truncate mt-0.5">
-                        {dropoff.name}
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">
-                        {dropoff.address} · {dropoff.city}
-                      </p>
+                      <span className="text-[11px] text-slate-400 block">{t.destination}</span>
+                      <p className="text-xs font-semibold text-white truncate">{dropoff.name}</p>
                     </button>
                   </div>
 
-                  {/* Right Swap Button */}
-                  <div className="flex flex-col items-center justify-center pl-1 flex-shrink-0">
+                  {/* Swap */}
+                  <div className="flex items-center shrink-0">
                     <button
                       type="button"
                       id="uber-swap-route-btn"
                       onClick={handleSwapLocations}
-                      className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-slate-700 rounded-xl transition-all shadow-sm"
+                      className="min-h-[40px] min-w-[40px] flex items-center justify-center bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 rounded-xl transition-colors"
                       title="Swap pickup and destination"
                     >
                       <ArrowUpDown className="w-4 h-4" />
@@ -1244,463 +1100,260 @@ export const RiderBookingPanel: React.FC<RiderBookingPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Multi-Stop Add Button */}
-                {intermediateStops.length < 2 && (
-                  <div className="flex justify-end pt-1">
+                {/* Quick Destination Chips & Add Stop */}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    {[
+                      { id: 'loc_airport_cmb', name: 'CMB Airport' },
+                      { id: 'loc_fort_station', name: 'Fort Station' },
+                      { id: 'loc_galle_fort', name: 'Galle Fort' },
+                      { id: 'loc_kandy_tooth', name: 'Kandy' },
+                    ].map((item) => {
+                      const targetLoc = SRI_LANKA_LOCATIONS.find((l) => l.id === item.id);
+                      const isSelected = dropoff.id === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => targetLoc && onSelectDropoff(targetLoc)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors border ${
+                            isSelected
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {item.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {intermediateStops.length < 2 && (
                     <button
                       type="button"
                       id="uber-add-stop-btn"
                       onClick={handleAddIntermediateStop}
-                      className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1 transition-colors"
+                      className="text-[11px] text-sky-400 hover:text-sky-300 font-medium flex items-center gap-0.5 whitespace-nowrap shrink-0"
                     >
                       <Plus className="w-3 h-3" />
                       <span>{t.addStop}</span>
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* 1-Tap Quick Destinations (Uber-style Instant Picks) */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                    <Navigation className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Where to? (1-Tap Quick Destinations)</span>
+              {/* Clean Vehicle Selector */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-300">
+                    {t.chooseFleet}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setSearchModalMode('dropoff')}
-                    className="text-emerald-400 hover:text-emerald-300 text-[11px] font-semibold flex items-center gap-0.5"
-                  >
-                    Search all <ChevronRight className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {[
-                    { id: 'loc_airport_cmb', name: "CMB Airport", city: 'Negombo', icon: '✈️' },
-                    { id: 'loc_galle_fort', name: 'Galle Fort', city: 'Galle', icon: '🏰' },
-                    { id: 'loc_fort_station', name: 'Fort Railway', city: 'Colombo', icon: '🚆' },
-                    { id: 'loc_kandy_tooth', name: 'Tooth Temple', city: 'Kandy', icon: '🛕' },
-                    { id: 'loc_unawatuna_beach', name: 'Unawatuna Beach', city: 'Galle', icon: '🌊' },
-                    { id: 'loc_one_galle_face', name: 'One Galle Face', city: 'Colombo', icon: '🏙️' },
-                  ].map((item) => {
-                    const isSelected = dropoff.id === item.id;
-                    const targetLoc = SRI_LANKA_LOCATIONS.find((l) => l.id === item.id);
-                    return (
+                  <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                    {[
+                      { id: 'all', label: 'All' },
+                      { id: 'budget', label: 'Budget' },
+                      { id: 'comfort', label: 'AC' },
+                      { id: 'group', label: 'Van' },
+                    ].map((f) => (
                       <button
-                        key={item.id}
+                        key={f.id}
                         type="button"
-                        onClick={() => {
-                          if (targetLoc) onSelectDropoff(targetLoc);
-                        }}
-                        className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
-                          isSelected
-                            ? 'bg-emerald-500/20 border-emerald-500 text-white ring-1 ring-emerald-500/40 shadow-sm'
-                            : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+                        onClick={() => handleSelectOpinion(f.id as any)}
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                          easyOpinion === f.id
+                            ? 'bg-emerald-500 text-slate-950 font-bold'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <span className="text-base flex-shrink-0">{item.icon}</span>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold truncate leading-tight">{item.name}</p>
-                          <p className="text-[10px] text-slate-400 truncate">{item.city}</p>
-                        </div>
+                        {f.label}
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {activeVehicleOptions
+                    .filter((veh) => {
+                      if (easyOpinion === 'budget') return veh.id === 'tuk' || veh.id === 'moto';
+                      if (easyOpinion === 'comfort') return veh.ac;
+                      if (easyOpinion === 'group') return veh.capacity >= 4;
+                      return true;
+                    })
+                    .map((veh) => {
+                      const isSelected = selectedCategory === veh.id;
+                      const vehFare = calculateFare(veh, totalDistanceKm, surgeMultiplier, appliedDiscount);
+                      const vehTotal = vehFare.totalLkr + tollFee;
+
+                      return (
+                        <button
+                          key={veh.id}
+                          type="button"
+                          id={`vehicle-option-${veh.id}`}
+                          onClick={() => setSelectedCategory(veh.id)}
+                          className={`flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${
+                            isSelected
+                              ? 'bg-emerald-500/10 border-emerald-500'
+                              : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                isSelected
+                                  ? 'bg-emerald-500 text-slate-950'
+                                  : 'bg-slate-900 text-emerald-400 border border-slate-800'
+                              }`}
+                            >
+                              {veh.id === 'tuk' ? (
+                                <span className="font-bold text-xs">TUK</span>
+                              ) : (
+                                <Car className="w-5 h-5" />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="font-bold text-white text-xs sm:text-sm truncate">
+                                {veh.name}
+                              </p>
+                              <p className="text-[11px] text-slate-400 tabular-nums">
+                                {veh.etaMins} min · {veh.capacity} seats{veh.ac ? ' · AC' : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0 ml-2">
+                            <span className="text-sm font-bold text-white font-heading tabular-nums block">
+                              {currency !== 'LKR'
+                                ? formatPrice(vehTotal, currency as CurrencyMode)
+                                : `LKR ${vehTotal.toLocaleString()}`}
+                            </span>
+                            <span className="text-[11px] text-slate-400 tabular-nums">
+                              {Math.round(veh.perKmLkr)}/km
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
 
-              {/* Advance Booking & Airport Transfer Toggle */}
-              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-sky-400" />
-                    <span className="text-xs font-bold text-white">{t.scheduleForLater}</span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isScheduled}
-                      onChange={(e) => setIsScheduled(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
-                  </label>
-                </div>
+              {/* Collapsible Optional Trip Options (Schedule, Expressway, Split Fare, Promo) */}
+              <div className="border border-slate-800 rounded-xl bg-slate-950/50 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowTripOptions(!showTripOptions)}
+                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-medium text-slate-300 hover:text-white transition-colors"
+                >
+                  <span>
+                    Trip options & promo
+                    {(isScheduled || includeExpressway || appliedDiscount > 0) && (
+                      <span className="text-emerald-400 ml-1.5">· Active</span>
+                    )}
+                  </span>
+                  <ChevronRight
+                    className={`w-4 h-4 text-slate-400 transition-transform ${
+                      showTripOptions ? 'rotate-90' : ''
+                    }`}
+                  />
+                </button>
 
-                {isScheduled && (
-                  <div className="pt-2 border-t border-slate-800/80 space-y-2 animate-in fade-in">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label className="text-[10px] text-slate-400 font-semibold block mb-1">
-                          Pickup Time
-                        </label>
+                {showTripOptions && (
+                  <div className="px-3.5 pb-3.5 pt-2 border-t border-slate-800 space-y-3 text-xs">
+                    {/* Schedule toggle */}
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <span className="text-slate-300 font-medium">{t.scheduleForLater}</span>
+                      <input
+                        type="checkbox"
+                        checked={isScheduled}
+                        onChange={(e) => setIsScheduled(e.target.checked)}
+                        className="rounded text-emerald-500 cursor-pointer"
+                      />
+                    </label>
+
+                    {isScheduled && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                           type="text"
                           value={scheduledDateTime}
                           onChange={(e) => setScheduledDateTime(e.target.value)}
+                          placeholder="Pickup time"
                           className="w-full py-1.5 px-2.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white"
                         />
+                        <input
+                          type="text"
+                          placeholder={t.flightPlaceholder}
+                          value={flightNumber}
+                          onChange={(e) => setFlightNumber(e.target.value)}
+                          className="w-full py-1.5 px-2.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white uppercase"
+                        />
                       </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 font-semibold block mb-1">
-                          {t.flightNumber}
-                        </label>
-                        <div className="relative">
-                          <Plane className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                          <input
-                            type="text"
-                            placeholder={t.flightPlaceholder}
-                            value={flightNumber}
-                            onChange={(e) => setFlightNumber(e.target.value)}
-                            className="w-full py-1.5 pl-8 pr-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white uppercase placeholder:text-slate-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-emerald-400 block">
-                      ✓ Driver assigned 30 mins before departure with flight delay tracking.
-                    </span>
-                  </div>
-                )}
-              </div>
+                    )}
 
-              {/* Expressway Toll Toggle */}
-              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
-                <label className="flex items-center justify-between cursor-pointer text-xs">
-                  <div className="flex items-center gap-2">
-                    <Navigation className="w-3.5 h-3.5 text-emerald-400" />
-                    <div>
-                      <span className="text-slate-200 font-semibold">{t.useExpressway}</span>
-                      <span className="text-[10px] text-slate-400 block">
-                        Airport E03 / Southern E01 fast track (+LKR 300)
+                    {/* Expressway toggle */}
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <span className="text-slate-300 font-medium">
+                        {t.useExpressway} (+LKR {expresswayTollLkr})
                       </span>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={includeExpressway}
-                    onChange={(e) => setIncludeExpressway(e.target.checked)}
-                    className="rounded text-emerald-500 focus:ring-0 cursor-pointer"
-                  />
-                </label>
-              </div>
+                      <input
+                        type="checkbox"
+                        checked={includeExpressway}
+                        onChange={(e) => setIncludeExpressway(e.target.checked)}
+                        className="rounded text-emerald-500 cursor-pointer"
+                      />
+                    </label>
 
-              {/* Fleet Selection Carousel */}
-              <div>
-                {/* Easy Opinions / 1-Tap Priority Filter Bar */}
-                <div className="mb-3 p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Easy Options for Vehicle Pick</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">1-Tap Filter</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
-                    <button
-                      type="button"
-                      id="opinion-budget"
-                      onClick={() => handleSelectOpinion('budget')}
-                      className={`p-2 rounded-lg border font-semibold flex items-center gap-1.5 transition-all text-left ${
-                        easyOpinion === 'budget'
-                          ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-1 ring-amber-500/50'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className="text-base leading-none">⚡</span>
-                      <div>
-                        <span className="block font-bold">Lowest Fare</span>
-                        <span className="text-[9px] text-slate-400 block">Tuk & Moto</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      id="opinion-fastest"
-                      onClick={() => handleSelectOpinion('fastest')}
-                      className={`p-2 rounded-lg border font-semibold flex items-center gap-1.5 transition-all text-left ${
-                        easyOpinion === 'fastest'
-                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/50'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className="text-base leading-none">⏱️</span>
-                      <div>
-                        <span className="block font-bold">Fastest ETA</span>
-                        <span className="text-[9px] text-slate-400 block">Nearest Driver</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      id="opinion-comfort"
-                      onClick={() => handleSelectOpinion('comfort')}
-                      className={`p-2 rounded-lg border font-semibold flex items-center gap-1.5 transition-all text-left ${
-                        easyOpinion === 'comfort'
-                          ? 'bg-sky-500/20 border-sky-500 text-sky-300 ring-1 ring-sky-500/50'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className="text-base leading-none">❄️</span>
-                      <div>
-                        <span className="block font-bold">AC Comfort</span>
-                        <span className="text-[9px] text-slate-400 block">Cool Air Car</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      id="opinion-group"
-                      onClick={() => handleSelectOpinion('group')}
-                      className={`p-2 rounded-lg border font-semibold flex items-center gap-1.5 transition-all text-left ${
-                        easyOpinion === 'group'
-                          ? 'bg-purple-500/20 border-purple-500 text-purple-300 ring-1 ring-purple-500/50'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className="text-base leading-none">👥</span>
-                      <div>
-                        <span className="block font-bold">Family / Van</span>
-                        <span className="text-[9px] text-slate-400 block">4 to 7 Seats</span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {easyOpinion !== 'all' && (
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[10px] text-emerald-400 font-medium">
-                        Filtered for: <strong className="uppercase">{easyOpinion}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectOpinion('all')}
-                        className="text-[10px] text-slate-400 hover:text-white underline"
-                      >
-                        Reset to show all ({activeVehicleOptions.length})
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    {t.chooseFleet}
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    {t.estimatedDistance}: <strong className="text-white">{totalDistanceKm} km</strong>
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  {activeVehicleOptions.filter((veh) => {
-                    if (easyOpinion === 'budget') return veh.id === 'tuk' || veh.id === 'moto';
-                    if (easyOpinion === 'comfort') return veh.ac;
-                    if (easyOpinion === 'group') return veh.capacity >= 4;
-                    return true;
-                  }).map((veh) => {
-                    const isSelected = selectedCategory === veh.id;
-                    const vehFare = calculateFare(veh, totalDistanceKm, surgeMultiplier, appliedDiscount);
-                    const vehTotal = vehFare.totalLkr + tollFee;
-                    const opinionTag = 
-                      veh.id === 'tuk' ? '⚡ Lowest Fare' :
-                      veh.id === 'moto' ? '⏱️ Solo Express' :
-                      veh.id === 'nano' ? '❄️ Budget AC' :
-                      veh.id === 'sedan' ? '⭐ Premium AC' :
-                      veh.id === 'van' ? '👥 7 Seats & Bags' : '';
-
-                    return (
-                      <button
-                        key={veh.id}
-                        id={`vehicle-option-${veh.id}`}
-                        onClick={() => setSelectedCategory(veh.id)}
-                        className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-                          isSelected
-                            ? 'bg-emerald-950/40 border-emerald-500/80 shadow-md shadow-emerald-950/20 ring-1 ring-emerald-500/50'
-                            : 'bg-slate-950/40 border-slate-800/80 hover:border-slate-700 hover:bg-slate-800/30'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              veh.id === 'tuk'
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                                : 'bg-slate-800 text-emerald-400 border border-slate-700'
-                            }`}
-                          >
-                            {veh.id === 'tuk' ? (
-                              <span className="font-extrabold text-sm tracking-tighter text-amber-300 font-heading">
-                                TUK
-                              </span>
-                            ) : (
-                              <Car className="w-5 h-5" />
-                            )}
-                          </div>
-
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-white text-xs md:text-sm">{veh.name}</span>
-                              {opinionTag && (
-                                <span className="px-1.5 py-0.5 bg-emerald-500/15 text-emerald-300 text-[9px] font-bold rounded border border-emerald-500/30">
-                                  {opinionTag}
-                                </span>
-                              )}
-                              {veh.popular && !opinionTag && (
-                                <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 text-[9px] font-bold rounded border border-emerald-500/30">
-                                  POPULAR
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-emerald-400" />
-                                {veh.etaMins} {t.minsAway}
-                              </span>
-                              <span>•</span>
-                              <span className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
-                                {veh.capacity} {t.seats}
-                              </span>
-                              {veh.ac && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-sky-400 font-semibold text-[10px]">{t.ac}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Fare in Selected Currency */}
-                        <div className="text-right">
-                          <span className="text-sm font-bold text-white font-heading block">
-                            {currency !== 'LKR' ? (
-                              <>
-                                <span>{formatPrice(vehTotal, currency as CurrencyMode)}</span>
-                                <span className="block text-[10px] text-slate-400 font-normal">
-                                  LKR {vehTotal.toLocaleString()}
-                                </span>
-                              </>
-                            ) : (
-                              <span>LKR {vehTotal.toLocaleString()}</span>
-                            )}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {Math.round(veh.perKmLkr)} LKR/km
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Optional Trip Preferences (Promo Code & Split Fare) */}
-              <div className="flex items-center gap-2 pt-1 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setShowSplitFare(!showSplitFare)}
-                  className={`flex-1 py-2 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
-                    showSplitFare || splitShared
-                      ? 'bg-slate-800 border-emerald-500/50 text-emerald-300'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{showSplitFare ? 'Hide Split' : 'Split Fare'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPromoCode(promoCode ? '' : 'AYUBOWAN')}
-                  className={`flex-1 py-2 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
-                    appliedDiscount > 0
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{appliedDiscount > 0 ? `Rs. ${appliedDiscount} Off` : 'Promo Code'}</span>
-                </button>
-              </div>
-
-              {/* Promo Code Drawer */}
-              {promoCode !== '' && (
-                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 animate-in fade-in">
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
+                    {/* Promo Code */}
+                    <div className="flex items-center gap-2">
                       <input
                         id="rider-promo-input"
                         type="text"
-                        placeholder="Enter AYUBOWAN or NASPICK10"
+                        placeholder="Promo code (e.g. AYUBOWAN)"
                         value={promoCode}
                         onChange={(e) => setPromoCode(e.target.value)}
-                        className="w-full py-2 pl-3 pr-8 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white uppercase placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                        className="flex-1 py-1.5 px-3 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white uppercase placeholder:text-slate-500"
                       />
-                      {appliedDiscount > 0 && (
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400 absolute right-2.5 top-2.5" />
-                      )}
+                      <button
+                        type="button"
+                        onClick={handleApplyPromo}
+                        className="py-1.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-colors"
+                      >
+                        {t.apply}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleApplyPromo}
-                      className="py-2 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-colors"
-                    >
-                      {t.apply}
-                    </button>
-                  </div>
-                  {promoSuccess && <p className="text-[11px] text-emerald-400 font-medium">{promoSuccess}</p>}
-                  {promoError && <p className="text-[11px] text-rose-400 font-medium">{promoError}</p>}
-                </div>
-              )}
+                    {promoSuccess && <p className="text-[11px] text-emerald-400">{promoSuccess}</p>}
+                    {promoError && <p className="text-[11px] text-rose-400">{promoError}</p>}
 
-              {/* Split Fare Calculator with Friends */}
-              {showSplitFare && (
-                <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2 animate-in fade-in text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">{t.splitWith}:</span>
-                    <div className="flex items-center gap-1">
-                      {[2, 3, 4, 5].map((num) => (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => setSplitRidersCount(num)}
-                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
-                            splitRidersCount === num
-                              ? 'bg-emerald-500 text-slate-950'
-                              : 'bg-slate-800 text-slate-300 hover:text-white'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
+                    {/* Split Fare */}
+                    <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                      <span className="text-slate-300">Split fare ({splitRidersCount} riders)</span>
+                      <div className="flex items-center gap-1">
+                        {[2, 3, 4].map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              setShowSplitFare(true);
+                              setSplitRidersCount(num);
+                            }}
+                            className={`w-7 h-7 rounded-md text-xs font-bold ${
+                              showSplitFare && splitRidersCount === num
+                                ? 'bg-emerald-500 text-slate-950'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    {showSplitFare && (
+                      <p className="text-[11px] text-emerald-400 tabular-nums">
+                        Each pays LKR {Math.round(fare.totalLkr / splitRidersCount).toLocaleString()}
+                      </p>
+                    )}
                   </div>
-
-                  <div className="flex items-center justify-between p-2 bg-slate-900 rounded-lg">
-                    <span className="text-slate-300">Each rider pays:</span>
-                    <span className="font-extrabold text-emerald-400 text-sm font-heading">
-                      LKR {Math.round(fare.totalLkr / splitRidersCount).toLocaleString()} {t.perPerson}
-                    </span>
-                  </div>
-
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      `Hey! Let's split our Naspick ride from ${pickup.name} to ${dropoff.name}. Total: LKR ${fare.totalLkr}, our share is LKR ${Math.round(
-                        fare.totalLkr / splitRidersCount
-                      )} each.`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>{t.sendSplitWhatsapp}</span>
-                  </a>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Uber-Style Bottom Sticky Booking Bar */}
               <div className="pt-3 border-t border-slate-800 space-y-3">

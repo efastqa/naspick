@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   body {
@@ -27,4 +28,131 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(16, 185, 129, 0.8);
+}
+
+/* ========================================================
+   LIGHT THEME DESIGN ENGINE (WCAG AA High Contrast)
+   ======================================================== */
+html.light,
+.light {
+  color-scheme: light;
+}
+
+html.light body,
+.light body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+
+/* Base surface overrides in Light Theme */
+.light .bg-slate-950,
+.light.bg-slate-950 {
+  background-color: #f8fafc !important;
+}
+
+.light .bg-slate-950\/95,
+.light .bg-slate-950\/90,
+.light .bg-slate-950\/80,
+.light .bg-slate-950\/70,
+.light .bg-slate-950\/60,
+.light .bg-slate-950\/50,
+.light .bg-slate-950\/40 {
+  background-color: rgba(248, 250, 252, 0.92) !important;
+}
+
+.light .bg-slate-900,
+.light.bg-slate-900,
+.light .bg-slate-900\/95,
+.light .bg-slate-900\/90,
+.light .bg-slate-900\/80,
+.light .bg-slate-900\/70 {
+  background-color: #ffffff !important;
+}
+
+.light .bg-slate-850,
+.light .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+}
+
+.light .border-slate-800,
+.light .border-slate-800\/80,
+.light .border-slate-800\/60,
+.light .border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Text readability in Light Mode */
+.light .text-white {
+  color: #0f172a !important;
+}
+
+.light .text-slate-100,
+.light .text-slate-200 {
+  color: #1e293b !important;
+}
+
+.light .text-slate-300 {
+  color: #334155 !important;
+}
+
+.light .text-slate-400 {
+  color: #64748b !important;
+}
+
+.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Light Mode Input controls */
+.light input:not([type="checkbox"]):not([type="radio"]),
+.light select,
+.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light input:not([type="checkbox"]):not([type="radio"])::placeholder,
+.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Light Mode Hover States */
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.light .hover\:bg-slate-850:hover,
+.light .hover\:bg-slate-900:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Modal Backdrops in Light Mode */
+.light .bg-black\/80,
+.light .bg-black\/70,
+.light .bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Emerald elements contrast boost in light mode */
+.light .text-emerald-400 {
+  color: #059669 !important;
+}
+
+.light .bg-emerald-950\/40,
+.light .bg-emerald-950\/30 {
+  background-color: #ecfdf5 !important;
 }

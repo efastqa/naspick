@@ -30,6 +30,7 @@ interface SriLankaMapProps {
   pickupTracking?: DriverPickupTracking | null;
   onToggleFollowDriver?: () => void;
   isFollowDriverActive?: boolean;
+  theme?: 'dark' | 'light';
 }
 
 export const SriLankaMap: React.FC<SriLankaMapProps> = ({
@@ -44,7 +45,9 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
   pickupTracking,
   onToggleFollowDriver,
   isFollowDriverActive = true,
+  theme = 'dark',
 }) => {
+  const isLight = theme === 'light';
   const [zoom, setZoom] = useState(1);
   const [mapMode, setMapMode] = useState<'streets' | 'satellite'>('streets');
   const [showTraffic, setShowTraffic] = useState(true);
@@ -226,7 +229,9 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
   return (
     <div 
       id="sri-lanka-interactive-map"
-      className={`relative w-full h-full min-h-[300px] sm:min-h-[360px] md:min-h-[440px] bg-slate-950 overflow-hidden select-none cursor-grab active:cursor-grabbing rounded-2xl border border-slate-800 shadow-2xl ${
+      className={`relative w-full h-full min-h-[300px] sm:min-h-[360px] md:min-h-[440px] ${
+        isLight ? 'bg-sky-50 border-slate-300' : 'bg-slate-950 border-slate-800'
+      } overflow-hidden select-none cursor-grab active:cursor-grabbing rounded-2xl border shadow-2xl ${
         isDragging ? 'touch-none' : 'touch-pan-y'
       }`}
       onMouseDown={handleMouseDown}
@@ -252,14 +257,14 @@ export const SriLankaMap: React.FC<SriLankaMapProps> = ({
         <defs>
           {/* Ocean Gradient */}
           <linearGradient id="oceanGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={mapMode === 'streets' ? '#04101e' : '#020617'} />
-            <stop offset="100%" stopColor={mapMode === 'streets' ? '#081d33' : '#090d16'} />
+            <stop offset="0%" stopColor={isLight ? '#e0f2fe' : mapMode === 'streets' ? '#04101e' : '#020617'} />
+            <stop offset="100%" stopColor={isLight ? '#bae6fd' : mapMode === 'streets' ? '#081d33' : '#090d16'} />
           </linearGradient>
 
           {/* Land Mass Gradient */}
           <linearGradient id="landGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={mapMode === 'streets' ? '#0c1a24' : '#111827'} />
-            <stop offset="100%" stopColor={mapMode === 'streets' ? '#09151e' : '#0b0f19'} />
+            <stop offset="0%" stopColor={isLight ? '#ffffff' : mapMode === 'streets' ? '#0c1a24' : '#111827'} />
+            <stop offset="100%" stopColor={isLight ? '#f8fafc' : mapMode === 'streets' ? '#09151e' : '#0b0f19'} />
           </linearGradient>
 
           {/* Glowing Route Line */}

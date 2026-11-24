@@ -256,6 +256,7 @@ export interface AppSettings {
   soundAlertsEnabled: boolean;
   lowDataMode: boolean;
   highContrastMap: boolean;
+  theme?: 'dark' | 'light';
 }
 
 export interface CustomerSavedPlace {

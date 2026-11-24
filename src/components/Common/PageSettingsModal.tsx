@@ -16,7 +16,9 @@ import {
   Radio, 
   SmartphoneNfc,
   ExternalLink,
-  Layers
+  Layers,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { AppSettings, DeviceViewMode, CurrencyMode, Language } from '../../types';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -274,6 +276,51 @@ export const PageSettingsModal: React.FC<PageSettingsModalProps> = ({
           {/* TAB 2: PREFERENCES & CURRENCY */}
           {activeTab === 'preferences' && (
             <div className="space-y-4">
+              {/* Theme Mode Selector: Dark / Light */}
+              <div>
+                <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block mb-1">
+                  Appearance Theme
+                </label>
+                <p className="text-[11px] text-slate-400 mb-2.5">
+                  Choose between dark radar mode (night driving) and crisp light theme (daylight navigation).
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    id="theme-select-dark"
+                    onClick={() => onUpdateSettings({ theme: 'dark' })}
+                    className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all text-left ${
+                      settings.theme !== 'light'
+                        ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-500/30'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Moon className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                    <div>
+                      <span className="font-bold text-xs block text-white">Dark Radar (Night)</span>
+                      <span className="text-[10px] text-slate-400 block">Obsidian & emerald contrast</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="theme-select-light"
+                    onClick={() => onUpdateSettings({ theme: 'light' })}
+                    className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all text-left ${
+                      settings.theme === 'light'
+                        ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm ring-1 ring-amber-500/30'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Sun className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                    <div>
+                      <span className="font-bold text-xs block text-white">Light Mode (Day)</span>
+                      <span className="text-[10px] text-slate-400 block">Crisp daylight & clean map</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               {/* Currency Selector */}
               <div>
                 <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block mb-1">
